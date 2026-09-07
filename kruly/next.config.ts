@@ -1,13 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverActions: {
-    allowedOrigins: [
-      "*.github.dev", 
-      "*.app.github.dev", 
-      "localhost:3000"
-    ]
-  }
+  // Biarkan kosong untuk konfigurasi default yang aman
 };
 
 export default nextConfig;
