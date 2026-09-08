@@ -1,94 +1,91 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { createTask } from "./actions"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
 
-export default function CreateTaskModal({ projectId }: { projectId: string }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [isPending, startTransition] = useTransition()
+export default function CreateTaskModal({ projectId, members, isOpen, onClose }: { projectId: string, members: any[], isOpen: boolean, onClose: () => void }) {
+  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
 
-  // Fungsi untuk menangani submit form
-  const handleSubmit = (formData: FormData) => {
-    startTransition(async () => {
-      await createTask(projectId, formData)
-      setIsOpen(false) // Tutup modal setelah sukses
-    })
+  if (!isOpen) return null
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsLoading(true)
+    
+    const formData = new FormData(e.currentTarget)
+    const payload = {
+      project_id: projectId,
+      title: formData.get('title'),
+      assignee_id: formData.get('assignee_id') || null,
+      due_date: formData.get('due_date') || null,
+      priority: formData.get('priority'),
+      status: 'Open'
+    }
+
+    try {
+      const { error } = await supabase.from('tasks').insert([payload])
+      if (error) throw new Error(error.message)
+      router.refresh()
+      onClose()
+    } catch (error: any) {
+      alert("Gagal membuat task: " + error.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
-    <>
-      <Button onClick={() => setIsOpen(true)}>+ Tambah Task</Button>
-
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-zinc-900">Task Baru</h3>
-              <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-zinc-700">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 text-zinc-900" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50">
+          <h3 className="text-lg font-bold">Add New Task</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="p-6 space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide">Task Name</label>
+              <input name="title" required placeholder="Contoh: Finalisasi Fitur..." className="w-full h-9 text-sm border border-zinc-200 rounded-md px-3 focus:ring-2 focus:ring-indigo-500 outline-none" autoFocus />
             </div>
 
-            <form action={handleSubmit}>
-              <div className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nama Task <span className="text-red-500">*</span></Label>
-                  <Input id="name" name="name" placeholder="Contoh: Desain Mockup UI" required />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Deskripsi</Label>
-                  <textarea 
-                    id="description" 
-                    name="description" 
-                    rows={3}
-                    className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
-                    placeholder="Detail tugas..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <select id="status" name="status" className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
-                      <option value="Open">Open</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Approved">Approved</option>
-                      <option value="Done">Done</option>
-                    </select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Prioritas</Label>
-                    <select id="priority" name="priority" className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
-                      <option value="Normal">Normal</option>
-                      <option value="High">High</option>
-                      <option value="Urgent">Urgent</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="due_date">Tenggat Waktu (Due Date)</Label>
-                  <Input id="due_date" name="due_date" type="date" />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide">Assignee</label>
+                <select name="assignee_id" className="w-full h-9 text-sm border border-zinc-200 rounded-md px-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                  <option value="">Unassigned</option>
+                  {members?.map((m: any) => (
+                    <option key={m.user_id} value={m.user_id}>User ID: {m.user_id.substring(0,6)}...</option>
+                  ))}
+                </select>
               </div>
-
-              <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                  Batal
-                </Button>
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? "Menyimpan..." : "Simpan Task"}
-                </Button>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide">Due Date</label>
+                <input name="due_date" type="date" className="w-full h-9 text-sm border border-zinc-200 rounded-md px-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
-            </form>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide">Priority</label>
+              <select name="priority" className="w-full h-9 text-sm border border-zinc-200 rounded-md px-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                <option value="Normal">Normal</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
-    </>
+          <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">Cancel</button>
+            <button type="submit" disabled={isLoading} className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors disabled:opacity-50">
+              {isLoading ? "Saving..." : "Create Task"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }

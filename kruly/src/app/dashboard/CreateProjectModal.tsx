@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-// Tambahkan prop isSidebarButton
 export default function CreateProjectModal({ 
   workspaces, 
   isSidebarButton = false 
@@ -29,6 +28,9 @@ export default function CreateProjectModal({
     const description = formData.get('description') as string
     const year = parseInt(formData.get('year') as string)
     const workspace_id = formData.get('workspace_id') as string
+    
+    // TANGKAP NILAI KATEGORI DARI FORM
+    const category = formData.get('category') as string || 'General'
 
     try {
       const { error } = await supabase.rpc('create_new_project', {
@@ -39,6 +41,9 @@ export default function CreateProjectModal({
       })
 
       if (error) throw new Error(error.message)
+
+      // SIMPAN KATEGORI KE DATABASE SECARA INSTAN SETELAH PROJECT TERBUAT
+      await supabase.from('projects').update({ category: category }).eq('workspace_id', workspace_id).eq('name', name)
 
       setIsOpen(false)
       router.refresh() 
@@ -63,7 +68,7 @@ export default function CreateProjectModal({
       {isSidebarButton ? (
         <button 
           onClick={(e) => { 
-            e.stopPropagation(); // Mencegah akordeon terbuka saat tombol plus diklik
+            e.stopPropagation(); 
             setIsOpen(true); 
           }} 
           className="text-zinc-500 hover:text-white p-1 transition-colors"
@@ -77,7 +82,7 @@ export default function CreateProjectModal({
         <Button onClick={() => setIsOpen(true)}>Buat Proyek Baru</Button>
       )}
 
-      {/* MODAL (Tetap sama persis) */}
+      {/* MODAL */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 text-zinc-900">
           <div className="bg-white rounded-xl shadow-lg w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
@@ -91,12 +96,10 @@ export default function CreateProjectModal({
             <form onSubmit={handleSubmit}>
               <div className="p-6 space-y-4">
                 
-                {/* LOGIKA BARU: Tampilkan dropdown hanya jika bukan dari Sidebar */}
+                {/* Tampilkan dropdown hanya jika bukan dari Sidebar */}
                 {isSidebarButton ? (
-                  // Jika dipanggil dari Sidebar, sembunyikan input tapi tetap kirim ID-nya
                   <input type="hidden" name="workspace_id" value={workspaces[0]?.id} />
                 ) : (
-                  // Jika dipanggil dari tempat lain (seperti Dashboard utama/MyTasks), tampilkan dropdown
                   <div className="space-y-2">
                     <Label htmlFor="workspace_id">Pilih Space (Workspace)</Label>
                     <select id="workspace_id" name="workspace_id" required className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
@@ -117,10 +120,24 @@ export default function CreateProjectModal({
                   <textarea id="description" name="description" rows={2} placeholder="Sistem pelacakan aset manufaktur..." className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="year">Tahun Pelaksanaan</Label>
-                  <Input id="year" name="year" type="number" defaultValue={new Date().getFullYear()} required />
+                {/* Tahun Pelaksanaan disebelah Kategori */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="year">Tahun Pelaksanaan</Label>
+                    <Input id="year" name="year" type="number" defaultValue={new Date().getFullYear()} required />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Kategori Proyek</Label>
+                    {/* EMOJI DIHAPUS AGAR SIMETRIS DENGAN INPUT YEAR */}
+                    <select id="category" name="category" className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 font-medium text-indigo-700">
+                      <option value="General">General</option>
+                      <option value="Corporate Planning">Corporate Planning</option>
+                      <option value="Digitalisasi">Digitalisasi</option>
+                    </select>
+                  </div>
                 </div>
+
               </div>
 
               <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-2">
