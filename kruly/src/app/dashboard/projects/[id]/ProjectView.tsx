@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import CreateLinkModal from "./CreateLinkModal"
 import CreateTaskModal from "./CreateTaskModal"
+import EditProjectModal from "../../EditProjectModal"
 
 const formatClickUpDate = (dateStr: string) => {
   if (!dateStr) return '-'
@@ -47,28 +48,25 @@ const StatusIcon = ({ status, className = "w-5 h-5" }: { status: string, classNa
   )
 }
 
-// IKON BREADCRUMB
-const ProjectCategoryIcon = ({ category, className = "w-3.5 h-3.5" }: { category: string, className?: string }) => {
-  switch (category) {
-    case 'Corporate Planning':
-      return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-    case 'Digitalisasi': 
-      return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-    default: 
-      return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-  }
+const ProjectCategoryIcon = ({ category, className = "w-4 h-4" }: { category: string, className?: string }) => {
+  const cat = (category || 'General').trim()
+  if (cat === 'Corporate Planning') return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+  if (cat === 'Digitalisasi') return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
 }
 
 export default function ProjectView({ project, tasks, links, members }: any) {
   const [isMounted, setIsMounted] = useState(false)
-  useEffect(() => { setIsMounted(true) }, [])
-
   const [activeTab, setActiveTab] = useState('list') 
+  
+  // STATE MODAL
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
   
   const [editingCell, setEditingCell] = useState<{ id: string, field: string } | null>(null)
   const [activeDropdown, setActiveDropdown] = useState<{ id: string, type: string } | null>(null)
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
@@ -77,10 +75,16 @@ export default function ProjectView({ project, tasks, links, members }: any) {
   const [localTasks, setLocalTasks] = useState<any[]>([])
   const [localProject, setLocalProject] = useState<any>(project || {})
 
+  useEffect(() => { setIsMounted(true) }, [])
+
+  // Sync data Prop ke State
+  useEffect(() => {
+    if (project) setLocalProject(project)
+  }, [project?.id, project?.category, project?.name, project?.description, project?.year]) 
+
   useEffect(() => {
     if (tasks) setLocalTasks(tasks)
-    if (project) setLocalProject(project)
-  }, [tasks, project])
+  }, [tasks])
 
   if (!isMounted) return <div className="p-10 flex justify-center text-zinc-400">Memuat antarmuka...</div>;
 
@@ -93,16 +97,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
   const clearSelection = () => setSelectedTasks(new Set())
 
-  const handleUpdateProject = async (field: string, value: string) => {
-    setLocalProject((prev: any) => ({ ...prev, [field]: value }))
-    setEditingCell(null)
-    try {
-      await supabase.from('projects').update({ [field]: value }).eq('id', project?.id)
-    } catch (e: any) {
-      console.error(e)
-    }
-  }
-
   const handleUpdateTask = async (taskId: string | string[], field: string, value: any) => {
     const idsToUpdate = Array.isArray(taskId) ? taskId : [taskId]
     setLocalTasks(prev => prev.map(t => idsToUpdate.includes(t.id) ? { ...t, [field]: value } : t))
@@ -110,6 +104,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
     setActiveDropdown(null)
     try {
       await supabase.from('tasks').update({ [field]: value }).in('id', idsToUpdate)
+      router.refresh()
     } catch (e: any) {
       console.error(e)
     }
@@ -119,7 +114,10 @@ export default function ProjectView({ project, tasks, links, members }: any) {
     if (!confirm('Hapus task ini?')) return
     setLocalTasks(prev => prev.filter(t => t.id !== taskId))
     setActiveDropdown(null)
-    try { await supabase.from('tasks').delete().eq('id', taskId) } catch (e) {}
+    try { 
+      await supabase.from('tasks').delete().eq('id', taskId)
+      router.refresh()
+    } catch (e) {}
   }
 
   const handleBulkDelete = async () => {
@@ -127,7 +125,10 @@ export default function ProjectView({ project, tasks, links, members }: any) {
     const ids = Array.from(selectedTasks)
     setLocalTasks(prev => prev.filter(t => !ids.includes(t.id)))
     setSelectedTasks(new Set())
-    try { await supabase.from('tasks').delete().in('id', ids) } catch (e) {}
+    try { 
+      await supabase.from('tasks').delete().in('id', ids)
+      router.refresh() 
+    } catch (e) {}
   }
 
   const groupedTasks = [
@@ -138,61 +139,77 @@ export default function ProjectView({ project, tasks, links, members }: any) {
     { name: 'APPROVED', color: 'bg-emerald-100 text-emerald-700', data: localTasks.filter((t: any) => t.status === 'Completed') },
   ]
 
+  const workspaceName = localProject?.workspaces?.name || 'Workspace'
+
+  // ==========================================
+  // KALKULASI LOGIKA GANTT CHART
+  // ==========================================
+  const ganttTasks = localTasks.filter(t => t.due_date); // Hanya task yang punya deadline
+  
+  let minTime = new Date().getTime();
+  let maxTime = new Date().getTime();
+
+  if (ganttTasks.length > 0) {
+    minTime = Math.min(...ganttTasks.map(t => new Date(t.created_at || new Date()).getTime()));
+    maxTime = Math.max(...ganttTasks.map(t => new Date(t.due_date).getTime()));
+  }
+
+  // Beri jarak visual (Padding) 3 hari sebelum task pertama, dan 7 hari setelah task terakhir
+  const PADDING_DAYS_START = 3;
+  const PADDING_DAYS_END = 7;
+  
+  const startDate = new Date(minTime);
+  startDate.setDate(startDate.getDate() - PADDING_DAYS_START);
+  
+  const endDate = new Date(maxTime);
+  endDate.setDate(endDate.getDate() + PADDING_DAYS_END);
+
+  const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+  const daysArray = Array.from({ length: totalDays }, (_, i) => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+
   return (
     <div className="space-y-6 w-full relative">
       
-      {(editingCell || activeDropdown) && (
-        <div className="fixed inset-0 z-40 bg-transparent" onClick={() => { setEditingCell(null); setActiveDropdown(null); }} />
+      {(editingCell || activeDropdown || isProjectDropdownOpen) && (
+        <div className="fixed inset-0 z-40 bg-transparent" onClick={() => { setEditingCell(null); setActiveDropdown(null); setIsProjectDropdownOpen(false); }} />
       )}
 
-      {/* HEADER BREADCRUMB ALA CLICKUP */}
-      <div className="border-b border-zinc-200 pb-2 relative z-10 -mx-6 px-6 -mt-6 pt-6">
+      {/* HEADER BREADCRUMB */}
+      <div className="border-b border-zinc-200 pb-2 relative z-10 -mx-6 px-6 -mt-6 pt-6 bg-white">
         
-        {/* Navigasi Breadcrumb Minimalis */}
-        <div className="flex items-center gap-2 text-[13px] text-zinc-500 font-medium mb-4">
-          
-          <Link href={`/dashboard/spaces/${localProject?.workspace_id || ''}`} className="flex items-center gap-1.5 hover:text-zinc-900 transition-colors bg-zinc-100 hover:bg-zinc-200 px-2 py-1 rounded-md">
-            <svg className="w-3.5 h-3.5 text-zinc-400" fill="currentColor" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-            Workspace
+        <div className="flex items-center gap-2 text-[14px] font-medium mb-6">
+          <Link href={`/dashboard/spaces/${localProject?.workspace_id || ''}`} className="flex items-center gap-2 text-zinc-600 hover:text-zinc-900 transition-colors px-2 py-1 rounded-md hover:bg-zinc-100">
+            <div className="w-5 h-5 rounded bg-rose-500 text-white flex items-center justify-center text-[10px] font-bold shadow-sm">
+              {workspaceName.charAt(0).toUpperCase()}
+            </div>
+            <span className="truncate max-w-[150px]">{workspaceName}</span>
           </Link>
-
           <span className="text-zinc-300">/</span>
 
-          {/* Ikon Kategori + Edit Nama Project */}
-          <div className="flex items-center gap-1.5 bg-zinc-50 px-2 py-1 rounded-md relative group/proj">
-            <div className="text-zinc-400" title={`Kategori: ${localProject?.category || 'General'}`}>
+          <div className="flex items-center px-2 py-1 relative">
+            <div className="text-zinc-500 mr-2" title={`Kategori: ${localProject?.category || 'General'}`}>
               <ProjectCategoryIcon category={localProject?.category} />
             </div>
-
-            {editingCell?.id === 'project' && editingCell.field === 'name' ? (
-              <input 
-                autoFocus className="font-bold text-zinc-900 border-b border-indigo-400 outline-none bg-transparent w-48"
-                defaultValue={localProject?.name}
-                onBlur={(e) => { if (e.target.value && e.target.value !== localProject.name) handleUpdateProject('name', e.target.value); else setEditingCell(null) }}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-              />
-            ) : (
-              <span onClick={() => setEditingCell({ id: 'project', field: 'name' })} className="font-bold text-zinc-800 cursor-pointer hover:text-indigo-600 transition-colors" title="Edit Nama Project">
-                {localProject?.name || 'Project Name'}
-              </span>
-            )}
+            <span className="font-bold text-lg text-zinc-900">{localProject?.name || 'Project Name'}</span>
             
-            {/* Tombol panah bawah untuk ganti kategori */}
-            <button onClick={() => setEditingCell({ id: 'project', field: 'category' })} className="opacity-0 group-hover/proj:opacity-100 text-zinc-400 hover:text-zinc-800 ml-1 transition-opacity">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7"/></svg>
-            </button>
-
-            {/* Dropdown Kategori Project */}
-            {editingCell?.id === 'project' && editingCell.field === 'category' && (
-              <div className="absolute top-full mt-1 left-0 w-48 bg-white border border-zinc-200 shadow-xl rounded-xl py-2 flex flex-col z-50 animate-in fade-in zoom-in-95 duration-100" onClick={(e) => e.stopPropagation()}>
-                {['General', 'Corporate Planning', 'Digitalisasi'].map(opt => (
-                  <button type="button" key={opt} className="text-left px-3 py-1.5 hover:bg-zinc-50 text-xs flex gap-2 items-center text-zinc-700 transition-colors w-full" onClick={(e) => { e.stopPropagation(); handleUpdateProject('category', opt); }}>
-                    <ProjectCategoryIcon category={opt} className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className={localProject?.category === opt ? 'font-bold text-indigo-700' : ''}>{opt}</span>
+            <div className="relative ml-2">
+              <button onClick={(e) => { e.stopPropagation(); setIsProjectDropdownOpen(!isProjectDropdownOpen) }} className="p-1.5 text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 rounded-md transition-colors">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 12a2 2 0 11-4 0 2 2 0 014 0zM14 12a2 2 0 11-4 0 2 2 0 014 0zM23 12a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              </button>
+              {isProjectDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-zinc-200 shadow-xl rounded-xl py-1.5 flex flex-col z-50 animate-in fade-in zoom-in-95 duration-100" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => { setIsEditProjectModalOpen(true); setIsProjectDropdownOpen(false); }} className="text-left px-4 py-2 hover:bg-zinc-50 text-sm font-medium text-zinc-700 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    Edit Proyek
                   </button>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -210,24 +227,15 @@ export default function ProjectView({ project, tasks, links, members }: any) {
       </div>
 
       <div className="pt-2 w-full">
+        {/* --- TAB 1: OVERVIEW --- */}
         {activeTab === 'overview' && (
           <div className="flex flex-col gap-4">
-            {/* AREA DESKRIPSI PINDAH KE OVERVIEW */}
-            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-6 relative group">
+            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-6">
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Deskripsi Proyek</h3>
-              {editingCell?.id === 'project' && editingCell.field === 'description' ? (
-                <textarea 
-                  autoFocus className="w-full text-sm text-zinc-800 bg-white border border-indigo-400 rounded-lg p-3 outline-none shadow-sm min-h-[100px]"
-                  defaultValue={localProject?.description}
-                  onBlur={(e) => { handleUpdateProject('description', e.target.value); setEditingCell(null) }}
-                />
-              ) : (
-                <div onClick={() => setEditingCell({ id: 'project', field: 'description' })} className="text-sm text-zinc-700 cursor-pointer hover:bg-zinc-100 -m-3 p-3 rounded-lg transition-colors whitespace-pre-wrap min-h-[60px]" title="Edit Deskripsi">
-                  {localProject?.description || <span className="italic text-zinc-400">Belum ada deskripsi. Klik untuk menambahkan.</span>}
-                </div>
-              )}
+              <div className="text-sm text-zinc-700 whitespace-pre-wrap">
+                {localProject?.description || <span className="italic text-zinc-400">Belum ada deskripsi. Gunakan tombol edit (3 titik) di atas untuk menambahkan.</span>}
+              </div>
             </div>
-            
             <div className="flex items-center justify-center h-40 border-2 border-dashed border-zinc-200 rounded-xl text-zinc-400 text-sm bg-white">
               Silakan pindah ke Tab List untuk melihat tugas.
             </div>
@@ -260,169 +268,162 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                     <div className="col-span-1"></div>
                   </div>
 
-                  {group.data.length === 0 ? (
-                    <div className="flex items-center gap-3 py-2.5 pl-11 border-b border-zinc-100">
-                      <span className="w-4 h-4 border border-dashed border-zinc-300 rounded-sm"></span>
-                      <span className="text-sm text-zinc-400 italic">Tidak ada task</span>
-                    </div>
-                  ) : (
-                    group.data.map((task: any) => {
-                      const isSelected = selectedTasks.has(task.id)
-                      const isEditing = editingCell?.id === task.id
-                      const isDropdownOpen = activeDropdown?.id === task.id
-                      
-                      return (
-                        <div key={task.id} className={`relative grid grid-cols-12 gap-4 items-center border-b border-zinc-100 py-1.5 transition-colors group/row ${isSelected ? 'bg-indigo-50/60' : 'hover:bg-zinc-50'}`} style={{ zIndex: isEditing || isDropdownOpen ? 50 : 1 }}>
-                          
-                          <div className="col-span-5 pl-3 flex items-center gap-2 text-sm font-medium text-zinc-800 h-full">
-                            <div className="w-6 flex justify-center shrink-0">
-                              <input type="checkbox" checked={isSelected} onChange={() => toggleTaskSelection(task.id)} className={`w-4 h-4 cursor-pointer accent-indigo-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}`} />
-                            </div>
-                            
-                            <div className="relative shrink-0 flex items-center justify-center">
-                              <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'status' }); }} className="cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center p-0.5">
-                                <StatusIcon status={task.status} />
-                              </div>
-
-                              {isEditing && editingCell.field === 'status' && (
-                                <div className="absolute top-full mt-2 left-0 w-64 bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl py-3 flex flex-col z-50 animate-in fade-in zoom-in-95 duration-100" onClick={(e) => e.stopPropagation()}>
-                                  <div className="px-4 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Not Started</div>
-                                  <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', 'Open'); }}>
-                                    <StatusIcon status="Open" className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">OPEN</span>
-                                  </button>
-                                  <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Active</div>
-                                  {['In-Progress', 'Waiting for Review', 'Revision'].map(opt => (
-                                    <button type="button" key={opt} className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', opt); }}>
-                                      <StatusIcon status={opt} className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">{opt.toUpperCase()}</span>
-                                    </button>
-                                  ))}
-                                  <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Done</div>
-                                  <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', 'Completed'); }}>
-                                    <StatusIcon status="Completed" className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">APPROVED</span>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-
-                            {isEditing && editingCell.field === 'title' ? (
-                              <input 
-                                autoFocus className="w-full text-sm border border-indigo-400 rounded px-1.5 py-0.5 outline-none shadow-sm" defaultValue={task.title}
-                                onBlur={(e) => { if (e.target.value && e.target.value !== task.title) handleUpdateTask(task.id, 'title', e.target.value); else setEditingCell(null) }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                              />
-                            ) : (
-                              <span onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'title' }); }} className="truncate hover:text-indigo-600 cursor-pointer px-1.5 py-1 -ml-1.5 rounded hover:bg-zinc-200/50 transition-colors flex-1 ml-1">
-                                {task.title}
-                              </span>
-                            )}
+                  {group.data.map((task: any) => {
+                    const isSelected = selectedTasks.has(task.id)
+                    const isEditing = editingCell?.id === task.id
+                    const isDropdownOpen = activeDropdown?.id === task.id
+                    
+                    return (
+                      <div key={task.id} className={`relative grid grid-cols-12 gap-4 items-center border-b border-zinc-100 py-1.5 transition-colors group/row ${isSelected ? 'bg-indigo-50/60' : 'hover:bg-zinc-50'}`} style={{ zIndex: isEditing || isDropdownOpen ? 50 : 1 }}>
+                        
+                        <div className="col-span-5 pl-3 flex items-center gap-2 text-sm font-medium text-zinc-800 h-full">
+                          <div className="w-6 flex justify-center shrink-0">
+                            <input type="checkbox" checked={isSelected} onChange={() => toggleTaskSelection(task.id)} className={`w-4 h-4 cursor-pointer accent-indigo-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}`} />
                           </div>
                           
-                          <div className="col-span-2 flex items-center justify-center relative h-full">
-                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'assignee' }); }} className="cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full max-w-[120px] h-full">
-                              {task.assignee_id ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">{(task.assignee_id || 'U').substring(0, 1).toUpperCase()}</div>
-                                  <span className="text-xs text-zinc-600 truncate">User</span>
-                                </div>
-                              ) : (
-                                <span className="text-[11px] text-zinc-400 flex items-center justify-center gap-1 hover:text-indigo-600"><svg className="w-3.5 h-3.5 border border-dashed border-zinc-400 rounded-full p-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>Assign</span>
-                              )}
+                          <div className="relative shrink-0 flex items-center justify-center">
+                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'status' }); }} className="cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center p-0.5">
+                              <StatusIcon status={task.status} />
                             </div>
 
-                            {isEditing && editingCell.field === 'assignee' && (
-                              <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-48 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 text-sm z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
-                                <button type="button" className="w-full text-left px-3 py-2 hover:bg-zinc-50 text-xs text-zinc-600 border-b border-zinc-100" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'assignee_id', null); }}>Unassigned</button>
-                                {members?.map((m: any) => (
-                                  <button type="button" key={m.user_id} className="w-full text-left px-3 py-1.5 hover:bg-zinc-50 flex items-center gap-2 text-xs font-medium" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'assignee_id', m.user_id); }}>
-                                    <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{(m.user_id || 'U').substring(0,1).toUpperCase()}</div> User {m.user_id.substring(0,4)}
+                            {isEditing && editingCell.field === 'status' && (
+                              <div className="absolute top-full mt-2 left-0 w-64 bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl py-3 flex flex-col z-50 animate-in fade-in zoom-in-95 duration-100" onClick={(e) => e.stopPropagation()}>
+                                <div className="px-4 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Not Started</div>
+                                <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', 'Open'); }}>
+                                  <StatusIcon status="Open" className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">OPEN</span>
+                                </button>
+                                <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Active</div>
+                                {['In-Progress', 'Waiting for Review', 'Revision'].map(opt => (
+                                  <button type="button" key={opt} className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', opt); }}>
+                                    <StatusIcon status={opt} className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">{opt.toUpperCase()}</span>
                                   </button>
                                 ))}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="col-span-2 flex items-center justify-center relative h-full">
-                            {isEditing && editingCell.field === 'dueDate' ? (
-                              <input 
-                                type="date" autoFocus className="absolute z-50 border border-indigo-400 rounded shadow-lg bg-white px-2 py-1 text-xs outline-none"
-                                defaultValue={task.due_date ? task.due_date.split('T')[0] : ''}
-                                onChange={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'due_date', e.target.value || null); }}
-                                onClick={e => e.stopPropagation()}
-                              />
-                            ) : (
-                              <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'dueDate' }); }} className={`cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors text-xs text-center w-full max-w-[100px] h-full flex items-center justify-center ${!task.due_date || new Date(task.due_date) < new Date() ? 'text-red-500 font-medium' : 'text-zinc-600'}`}>
-                                {formatClickUpDate(task.due_date)}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="col-span-1 flex items-center justify-center relative h-full">
-                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'priority' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
-                              <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" title={`Priority: ${task.priority || 'Normal'}`}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
-                            </div>
-
-                            {isEditing && editingCell.field === 'priority' && (
-                              <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-28 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
-                                {['Normal', 'High', 'Urgent'].map(p => (
-                                  <button type="button" key={p} className="text-left px-3 py-1.5 hover:bg-zinc-50 text-xs flex gap-2 items-center" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'priority', p); }}>
-                                    <svg className={`w-3 h-3 ${p === 'High' ? 'text-amber-500' : p === 'Urgent' ? 'text-red-500' : 'text-zinc-400'}`} fill={p !== 'Normal' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
-                                    <span className={p === 'Urgent' ? 'text-red-600 font-medium' : p === 'High' ? 'text-amber-600 font-medium' : 'text-zinc-600'}>{p}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="col-span-1 flex items-center justify-center relative h-full">
-                            {task.document_url ? (
-                              <div className="flex items-center gap-1.5 group/doc h-full justify-center">
-                                <a href={task.document_url} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center" title="Buka Dokumen">
-                                  <DocumentIcon url={task.document_url} className="w-4 h-4" />
-                                </a>
-                                <button onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="text-zinc-400 hover:text-zinc-700 opacity-0 group-hover/doc:opacity-100 flex items-center justify-center p-1 rounded hover:bg-zinc-200/50" title="Edit Link">
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Done</div>
+                                <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', 'Completed'); }}>
+                                  <StatusIcon status="Completed" className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">APPROVED</span>
                                 </button>
                               </div>
-                            ) : (
-                              <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
-                                <DocumentIcon url="" className="w-4 h-4 text-zinc-300 hover:text-zinc-500" />
-                              </div>
-                            )}
-
-                            {isEditing && editingCell.field === 'document' && (
-                              <form 
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  const val = new FormData(e.currentTarget).get('docUrl') as string;
-                                  handleUpdateTask(task.id, 'document_url', val || null);
-                                }}
-                                className="absolute top-full right-0 mt-1 w-64 bg-white border border-zinc-200 shadow-xl rounded-lg p-2 flex gap-2 z-50 animate-in zoom-in-95 duration-100" 
-                                onClick={e => e.stopPropagation()}
-                              >
-                                <input name="docUrl" type="url" placeholder="Paste Link URL..." autoFocus defaultValue={task.document_url || ''} className="flex-1 text-xs border border-zinc-200 rounded px-2 py-1.5 outline-none focus:border-indigo-500" />
-                                <button type="submit" className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition-colors">Save</button>
-                              </form>
-                            )}
-                          </div>
-                          
-                          <div className="col-span-1 flex items-center justify-end pr-4 relative h-full">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : { id: task.id, type: 'row' }); }}
-                              className={`text-zinc-400 hover:text-zinc-800 p-1.5 rounded-md transition-all flex items-center justify-center ${isDropdownOpen ? 'opacity-100 bg-zinc-200' : 'opacity-0 group-hover/row:opacity-100 hover:bg-zinc-200'}`}
-                            >
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 12a2 2 0 11-4 0 2 2 0 014 0zM14 12a2 2 0 11-4 0 2 2 0 014 0zM23 12a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                            </button>
-                            {isDropdownOpen && (
-                              <div className="absolute top-full right-4 mt-1 w-32 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
-                                <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">Delete Task</button>
-                              </div>
                             )}
                           </div>
 
+                          {isEditing && editingCell.field === 'title' ? (
+                            <input 
+                              autoFocus className="w-full text-sm border border-indigo-400 rounded px-1.5 py-0.5 outline-none shadow-sm" defaultValue={task.title}
+                              onBlur={(e) => { if (e.target.value && e.target.value !== task.title) handleUpdateTask(task.id, 'title', e.target.value); else setEditingCell(null) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                            />
+                          ) : (
+                            <span onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'title' }); }} className="truncate hover:text-indigo-600 cursor-pointer px-1.5 py-1 -ml-1.5 rounded hover:bg-zinc-200/50 transition-colors flex-1 ml-1">
+                              {task.title}
+                            </span>
+                          )}
                         </div>
-                      )
-                    })
-                  )}
+                        
+                        <div className="col-span-2 flex items-center justify-center relative h-full">
+                          <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'assignee' }); }} className="cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full max-w-[120px] h-full">
+                            {task.assignee_id ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">{(task.assignee_id || 'U').substring(0, 1).toUpperCase()}</div>
+                                <span className="text-xs text-zinc-600 truncate">User</span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-zinc-400 flex items-center justify-center gap-1 hover:text-indigo-600"><svg className="w-3.5 h-3.5 border border-dashed border-zinc-400 rounded-full p-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>Assign</span>
+                            )}
+                          </div>
+
+                          {isEditing && editingCell.field === 'assignee' && (
+                            <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-48 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 text-sm z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
+                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-zinc-50 text-xs text-zinc-600 border-b border-zinc-100" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'assignee_id', null); }}>Unassigned</button>
+                              {members?.map((m: any) => (
+                                <button type="button" key={m.user_id} className="text-left px-3 py-1.5 hover:bg-zinc-50 flex items-center gap-2 text-xs font-medium w-full" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'assignee_id', m.user_id); }}>
+                                  <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{(m.user_id || 'U').substring(0,1).toUpperCase()}</div> User {m.user_id.substring(0,4)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="col-span-2 flex items-center justify-center relative h-full">
+                          {isEditing && editingCell.field === 'dueDate' ? (
+                            <input 
+                              type="date" autoFocus className="absolute z-50 border border-indigo-400 rounded shadow-lg bg-white px-2 py-1 text-xs outline-none"
+                              defaultValue={task.due_date ? task.due_date.split('T')[0] : ''}
+                              onChange={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'due_date', e.target.value || null); }}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          ) : (
+                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'dueDate' }); }} className={`cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors text-xs text-center w-full max-w-[100px] h-full flex items-center justify-center ${!task.due_date || new Date(task.due_date) < new Date() ? 'text-red-500 font-medium' : 'text-zinc-600'}`}>
+                              {formatClickUpDate(task.due_date)}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="col-span-1 flex items-center justify-center relative h-full">
+                          <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'priority' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
+                            <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" title={`Priority: ${task.priority || 'Normal'}`}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+                          </div>
+
+                          {isEditing && editingCell.field === 'priority' && (
+                            <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-28 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
+                              {['Normal', 'High', 'Urgent'].map(p => (
+                                <button type="button" key={p} className="text-left px-3 py-1.5 hover:bg-zinc-50 text-xs flex gap-2 items-center" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'priority', p); }}>
+                                  <svg className={`w-3 h-3 ${p === 'High' ? 'text-amber-500' : p === 'Urgent' ? 'text-red-500' : 'text-zinc-400'}`} fill={p !== 'Normal' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+                                  <span className={p === 'Urgent' ? 'text-red-600 font-medium' : p === 'High' ? 'text-amber-600 font-medium' : 'text-zinc-600'}>{p}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="col-span-1 flex items-center justify-center relative h-full">
+                          {task.document_url ? (
+                            <div className="flex items-center gap-1.5 group/doc h-full justify-center">
+                              <a href={task.document_url} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center" title="Buka Dokumen">
+                                <DocumentIcon url={task.document_url} className="w-4 h-4" />
+                              </a>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="text-zinc-400 hover:text-zinc-700 opacity-0 group-hover/doc:opacity-100 flex items-center justify-center p-1 rounded hover:bg-zinc-200/50" title="Edit Link">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
+                              <DocumentIcon url="" className="w-4 h-4 text-zinc-300 hover:text-zinc-500" />
+                            </div>
+                          )}
+
+                          {isEditing && editingCell.field === 'document' && (
+                            <form 
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const val = new FormData(e.currentTarget).get('docUrl') as string;
+                                handleUpdateTask(task.id, 'document_url', val || null);
+                              }}
+                              className="absolute top-full right-0 mt-1 w-64 bg-white border border-zinc-200 shadow-xl rounded-lg p-2 flex gap-2 z-50 animate-in zoom-in-95 duration-100" 
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <input name="docUrl" type="url" placeholder="Paste Link URL..." autoFocus defaultValue={task.document_url || ''} className="flex-1 text-xs border border-zinc-200 rounded px-2 py-1.5 outline-none focus:border-indigo-500" />
+                              <button type="submit" className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition-colors">Save</button>
+                            </form>
+                          )}
+                        </div>
+                        
+                        <div className="col-span-1 flex items-center justify-end pr-4 relative h-full">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : { id: task.id, type: 'row' }); }}
+                            className={`text-zinc-400 hover:text-zinc-800 p-1.5 rounded-md transition-all flex items-center justify-center ${isDropdownOpen ? 'opacity-100 bg-zinc-200' : 'opacity-0 group-hover/row:opacity-100 hover:bg-zinc-200'}`}
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 12a2 2 0 11-4 0 2 2 0 014 0zM14 12a2 2 0 11-4 0 2 2 0 014 0zM23 12a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                          </button>
+                          {isDropdownOpen && (
+                            <div className="absolute top-full right-4 mt-1 w-32 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">Delete Task</button>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    )
+                  })}
 
                   <div className="py-2 pl-11">
                     <button onClick={() => setIsTaskModalOpen(true)} className="text-[13px] text-zinc-400 hover:text-zinc-700 flex items-center gap-2 transition-colors">
@@ -433,6 +434,129 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* --- TAB 3: BOARD (Placeholder) --- */}
+        {activeTab === 'board' && (
+          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50 mt-4">
+            <svg className="w-10 h-10 text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+            <h3 className="text-sm font-bold text-zinc-600">Kanban Board</h3>
+            <p className="text-xs text-zinc-400 mt-1">Tampilan Board sedang dalam tahap pengembangan.</p>
+          </div>
+        )}
+
+        {/* --- TAB 4: GANTT CHART (BARU) --- */}
+        {activeTab === 'gantt' && (
+          <div className="mt-4 bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50/50">
+              <h3 className="text-sm font-bold text-zinc-800">Gantt Chart Timeline</h3>
+              
+              {/* Legenda Warna */}
+              <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-blue-500"></div> In Progress</span>
+                <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-amber-500"></div> Review</span>
+                <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-emerald-500"></div> Completed</span>
+              </div>
+            </div>
+
+            {ganttTasks.length === 0 ? (
+              <div className="p-16 text-center">
+                <div className="w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </div>
+                <h3 className="text-sm font-bold text-zinc-700">Belum Ada Timeline</h3>
+                <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">Tambahkan "Due Date" (Batas Waktu) pada task di tab List agar otomatis muncul di diagram Gantt ini.</p>
+              </div>
+            ) : (
+              <div className="flex w-full overflow-x-auto custom-scrollbar relative">
+                
+                {/* Bagian Kiri: Daftar Task (Sticky/Membeku) */}
+                <div className="w-64 shrink-0 border-r border-zinc-200 bg-white sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                  <div className="h-14 border-b border-zinc-200 flex items-center px-4 text-[10px] font-bold tracking-wider text-zinc-400 uppercase bg-zinc-50/80">
+                    Nama Task
+                  </div>
+                  <div className="flex flex-col">
+                    {ganttTasks.map((task: any) => (
+                      <div key={`title-${task.id}`} className="h-12 border-b border-zinc-100 flex items-center px-4 text-sm font-medium text-zinc-700 hover:text-indigo-600 hover:bg-zinc-50 transition-colors">
+                        <span className="truncate" title={task.title}>{task.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bagian Kanan: Garis Waktu (Timeline) */}
+                <div className="flex flex-col relative" style={{ width: `${totalDays * 45}px`, minWidth: '600px' }}>
+                  
+                  {/* Deretan Tanggal */}
+                  <div className="h-14 border-b border-zinc-200 bg-zinc-50/80 flex relative">
+                    {daysArray.map((d, i) => {
+                      const isToday = new Date().toDateString() === d.toDateString();
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center justify-center border-r border-zinc-200/50 relative">
+                          <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{d.toLocaleDateString('en-US', { weekday: 'short' })}</span>
+                          <span className={`text-[13px] font-bold mt-0.5 ${isToday ? 'text-white bg-indigo-600 w-6 h-6 flex items-center justify-center rounded-full shadow-sm' : 'text-zinc-700'}`}>
+                            {d.getDate()}
+                          </span>
+                          
+                          {/* Garis Vertikal Hari Ini (Today Line) */}
+                          {isToday && <div className="absolute top-14 left-1/2 w-0.5 h-[1000px] bg-indigo-500/30 z-0 -translate-x-1/2"></div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Area Warna-Warni Bar Task */}
+                  <div className="flex flex-col relative bg-zinc-50/30 pb-4">
+                    {ganttTasks.map((task: any) => {
+                      // Hitung panjang waktu
+                      const taskStart = new Date(task.created_at || task.due_date).getTime();
+                      const taskEnd = new Date(task.due_date).getTime();
+                      
+                      const totalSpanMs = endDate.getTime() - startDate.getTime();
+                      let leftPercent = ((taskStart - startDate.getTime()) / totalSpanMs) * 100;
+                      let widthPercent = ((taskEnd - taskStart) / totalSpanMs) * 100;
+
+                      // Proteksi agar Bar minimal memakan 1 kotak (1 hari) meskipun dikerjakan dan selesai di hari yang sama
+                      if (widthPercent < (100 / totalDays)) widthPercent = 100 / totalDays; 
+                      if (leftPercent < 0) leftPercent = 0;
+                      if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
+
+                      // Tentukan Warna Bar Berdasarkan Status Task
+                      let barColor = 'bg-zinc-400';
+                      if (task.status === 'Completed') barColor = 'bg-emerald-500';
+                      else if (task.status === 'In-Progress') barColor = 'bg-blue-500';
+                      else if (task.status === 'Waiting for Review') barColor = 'bg-amber-500';
+                      else if (task.status === 'Revision') barColor = 'bg-red-500';
+
+                      return (
+                        <div key={`bar-${task.id}`} className="h-12 border-b border-zinc-100/50 relative group">
+                          
+                          {/* Garis Kotak-Kotak Background */}
+                          <div className="absolute inset-0 flex">
+                            {daysArray.map((_, i) => (
+                               <div key={i} className="flex-1 border-r border-zinc-200/30"></div>
+                            ))}
+                          </div>
+
+                          {/* Balok Warna (Task Bar) */}
+                          <div 
+                            className={`absolute top-2 h-8 rounded-md shadow-sm ${barColor} hover:opacity-80 transition-all cursor-pointer flex items-center px-2 z-10`}
+                            style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
+                            title={`${task.title}\nStatus: ${task.status}\nDue Date: ${new Date(task.due_date).toLocaleDateString()}`}
+                          >
+                            <span className="text-[10px] font-bold text-white truncate drop-shadow-sm">
+                              {task.title}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -467,8 +591,8 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-zinc-800 border border-zinc-700 shadow-xl rounded-xl py-2 flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
                   <button type="button" className="text-left px-4 py-2 hover:bg-zinc-700/50 text-xs text-zinc-400 border-b border-zinc-700 mb-1" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'assignee_id', null); }}>Unassigned</button>
                   {members?.map((m: any) => (
-                    <button type="button" key={m.user_id} className="text-left px-4 py-2 hover:bg-zinc-700/50 flex items-center gap-3 text-xs font-medium text-zinc-300" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'assignee_id', m.user_id); }}>
-                      <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] text-white font-bold">{(m.user_id || 'U').substring(0,1).toUpperCase()}</div> User {m.user_id.substring(0,4)}
+                    <button type="button" key={m.user_id} className="text-left px-3 py-1.5 hover:bg-zinc-700/50 flex items-center gap-2 text-xs font-medium w-full" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'assignee_id', m.user_id); }}>
+                      <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{(m.user_id || 'U').substring(0,1).toUpperCase()}</div> User {m.user_id.substring(0,4)}
                     </button>
                   ))}
                 </div>
@@ -514,6 +638,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
       <CreateLinkModal projectId={project?.id} isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} />
       <CreateTaskModal projectId={project?.id} members={members} isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
+      <EditProjectModal project={localProject} isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} />
 
     </div>
   )

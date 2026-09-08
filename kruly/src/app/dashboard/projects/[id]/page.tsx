@@ -2,6 +2,10 @@ import { createClient } from "@/utils/supabase/server"
 import { notFound } from "next/navigation"
 import ProjectView from "./ProjectView"
 
+// 🔴 MANTRA ANTI-CACHE (Mencegah ikon mental kembali)
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function ProjectDetailPage({
   params,
 }: {
@@ -11,9 +15,10 @@ export default async function ProjectDetailPage({
   const projectId = resolvedParams.id
   const supabase = await createClient()
 
+  // 🔴 MENGAMBIL DATA PROJECT + NAMA WORKSPACE UNTUK BREADCRUMB
   const { data: project, error: projectError } = await supabase
     .from('projects')
-    .select('*')
+    .select('*, workspaces(name)') 
     .eq('id', projectId)
     .single()
 
@@ -37,7 +42,6 @@ export default async function ProjectDetailPage({
     .eq('workspace_id', project.workspace_id)
 
   return (
-    // Halaman dibiarkan mengalir bebas tanpa kotak/border!
     <div className="pb-10 min-h-screen">
       <ProjectView 
         project={project} 

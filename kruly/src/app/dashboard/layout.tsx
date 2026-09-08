@@ -3,6 +3,10 @@ import SidebarSpaces from "./SidebarSpaces"
 import SidebarNav from "./SidebarNav"
 import CreateSpaceModal from "./CreateSpaceModal"
 
+// 🔴 MANTRA ANTI-CACHE SIDEBAR
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -11,13 +15,12 @@ export default async function DashboardLayout({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Ambil data workspace beserta project di dalamnya
+  // PERBAIKAN: Memastikan 'category' ditarik dari Database
   const { data: workspaceMembers } = await supabase
     .from('workspace_members')
-    .select(`role, workspaces ( id, name, projects ( id, name ) )`)
+    .select(`role, workspaces ( id, name, projects ( id, name, category ) )`)
     .eq('user_id', user?.id)
 
-  // FILTER UNIK: Mencegah duplikasi visual jika ada ID yang kembar dari database
   const rawData = workspaceMembers?.map((wm: any) => wm.workspaces).filter(Boolean) || []
   const sidebarData = Array.from(new Map(rawData.map((item: any) => [item.id, item])).values())
 
@@ -33,26 +36,17 @@ export default async function DashboardLayout({
         
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           
-          {/* HOME MENU */}
           <div className="mb-8">
-            <div className="text-xs font-bold text-zinc-300 uppercase tracking-wider px-2 mb-2">
-              Home
-            </div>
+            <div className="text-xs font-bold text-zinc-300 uppercase tracking-wider px-2 mb-2">Home</div>
             <SidebarNav />
           </div>
           
-          {/* SPACES MENU */}
           <div>
             <div className="flex items-center justify-between px-2 mb-2">
-              <div className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
-                Spaces
-              </div>
-              
-              {/* Tombol Plus Modal */}
+              <div className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Spaces</div>
               <CreateSpaceModal />
             </div>
             
-            {/* DAFTAR SPACE - Dipanggil SATU KALI saja! */}
             <SidebarSpaces spaces={sidebarData} />
           </div>
 
