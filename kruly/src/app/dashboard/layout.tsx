@@ -1,8 +1,9 @@
 import { createClient } from "@/utils/supabase/server"
+import { redirect } from "next/navigation" // 🔴 IMPORT REDIRECT
 import SidebarSpaces from "./SidebarSpaces"
 import SidebarNav from "./SidebarNav"
 import CreateSpaceModal from "./CreateSpaceModal"
-import SidebarUserProfile from "./SidebarUserProfile" // 🔴 IMPORT KOMPONEN BARU
+import SidebarUserProfile from "./SidebarUserProfile"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -15,19 +16,29 @@ export default async function DashboardLayout({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // 🔴 PROTEKSI 1: Jika belum login sama sekali, tendang ke halaman Login!
+  if (!user) {
+    redirect('/login')
+  }
+
   const { data: workspaceMembers } = await supabase
     .from('workspace_members')
     .select(`role, workspaces ( id, name, projects ( id, name, category ) )`)
-    .eq('user_id', user?.id)
+    .eq('user_id', user.id)
 
   const rawData = workspaceMembers?.map((wm: any) => wm.workspaces).filter(Boolean) || []
   const sidebarData = Array.from(new Map(rawData.map((item: any) => [item.id, item])).values())
 
-  // 🔴 AMBIL DATA PROFIL USER YANG SEDANG LOGIN DARI TABEL PROFILES
-  let userProfile = null;
-  if (user) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-    userProfile = data;
+  // AMBIL DATA PROFIL USER YANG SEDANG LOGIN DARI TABEL PROFILES
+  const { data: userProfile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+
+  // 🔴 PROTEKSI 2: Jika user masuk dari Invite Link (belum punya nama), tendang ke halaman Set Password!
+  if (!userProfile?.full_name) {
+    redirect('/set-password')
   }
 
   return (
@@ -53,14 +64,12 @@ export default async function DashboardLayout({
           </div>
         </div>
 
-        {/* 🔴 MENGIRIMKAN DATA ROLE KE KOMPONEN PROFIL */}
-        {user && (
-          <SidebarUserProfile 
-            user={user} 
-            initialProfile={userProfile} 
-            userRole={workspaceMembers?.[0]?.role || 'Member'} 
-          />
-        )}
+        {/* MENGIRIMKAN DATA ROLE KE KOMPONEN PROFIL */}
+        <SidebarUserProfile 
+          user={user} 
+          initialProfile={userProfile} 
+          userRole={workspaceMembers?.[0]?.role || 'Member'} 
+        />
       </aside>
 
       {/* AREA KONTEN UTAMA */}
