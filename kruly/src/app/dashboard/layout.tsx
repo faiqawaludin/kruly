@@ -4,6 +4,7 @@ import SidebarSpaces from "./SidebarSpaces"
 import SidebarNav from "./SidebarNav"
 import CreateSpaceModal from "./CreateSpaceModal"
 import SidebarUserProfile from "./SidebarUserProfile"
+import NotificationBell from "@/components/NotificationBell"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -46,14 +47,16 @@ export default async function DashboardLayout({
       
       {/* SIDEBAR KIRI */}
       <aside className="w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col shrink-0">
-        <div className="h-16 flex items-center px-6 font-black text-2xl tracking-tighter text-white border-b border-zinc-900 shrink-0">
-          Kruly.
+        {/* SIDEBAR HEADER DENGAN LONCENG NOTIFIKASI */}
+        <div className="h-16 flex items-center justify-between px-6 border-b border-zinc-900 shrink-0">
+          <div className="font-black text-2xl tracking-tighter text-white">Kruly.</div>
+          <NotificationBell />
         </div>
         
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           <div className="mb-8">
             <div className="text-xs font-bold text-zinc-300 uppercase tracking-wider px-2 mb-2">Home</div>
-            <SidebarNav />
+            <SidebarNav globalRole={userProfile?.global_role} />
           </div>
           <div>
             <div className="flex items-center justify-between px-2 mb-2">

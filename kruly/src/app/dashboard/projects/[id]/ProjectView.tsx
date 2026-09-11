@@ -111,6 +111,23 @@ export default function ProjectView({ project, tasks, links, members }: any) {
     try {
       // Kirim perubahan ke database
       await supabase.from('tasks').update(updates).in('id', idsToUpdate)
+      
+      // 🔴 FIX: TRIGGER NOTIFIKASI JIKA ADA PERUBAHAN ASSIGNEE
+      if (updates.assignee_id !== undefined && updates.assignee_id !== null) {
+        const notifs = idsToUpdate.map(id => {
+          const task = localTasks.find(t => t.id === id)
+          return {
+            user_id: updates.assignee_id,
+            title: 'Tugas Diperbarui 🔄',
+            message: `Kamu di-assign ke task: "${task?.title || 'Tugas Baru'}"`,
+            link: `/dashboard/projects/${localProject?.id}?tab=list`
+          }
+        })
+        if (notifs.length > 0) {
+          await supabase.from('notifications').insert(notifs)
+        }
+      }
+
       router.refresh()
     } catch (e: any) {
       console.error(e)

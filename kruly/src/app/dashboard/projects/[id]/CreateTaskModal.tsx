@@ -19,7 +19,6 @@ export default function CreateTaskModal({
   const router = useRouter()
   const supabase = createClient()
 
-  // STATE UNTUK CUSTOM DROPDOWN
   const [assigneeId, setAssigneeId] = useState<string | null>(null)
   const [priority, setPriority] = useState<string>("Normal")
   const [isAssigneeOpen, setIsAssigneeOpen] = useState(false)
@@ -38,17 +37,27 @@ export default function CreateTaskModal({
     const newTask = {
       project_id: projectId,
       title: formData.get('title'),
-      description: null, // Dihilangkan dari form
+      description: null, 
       assignee_id: assigneeId, 
       due_date: formData.get('due_date') || null,
       priority: priority, 
       status: 'Open',
-      document_url: null, // Dihilangkan dari form
+      document_url: null, 
     }
 
     try {
       const { error } = await supabase.from('tasks').insert([newTask])
       if (error) throw error
+      
+      // 🔴 FIX: Trigger Notifikasi saat Task Baru Dibuat!
+      if (assigneeId) {
+        await supabase.from('notifications').insert({
+          user_id: assigneeId,
+          title: 'Tugas Baru 🎯',
+          message: `Kamu di-assign ke task baru: "${newTask.title}"`,
+          link: `/dashboard/projects/${projectId}?tab=list`
+        })
+      }
       
       setAssigneeId(null)
       setPriority("Normal")
@@ -65,15 +74,12 @@ export default function CreateTaskModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       
-      {/* Overlay penutup dropdown */}
       {(isAssigneeOpen || isPriorityOpen) && (
         <div className="absolute inset-0 z-40" onClick={(e) => { e.stopPropagation(); setIsAssigneeOpen(false); setIsPriorityOpen(false); }} />
       )}
 
-      {/* MODAL CONTAINER - Lebih compact dan border radius normal */}
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-visible animate-in zoom-in-95 duration-200 relative z-50 flex flex-col" onClick={e => e.stopPropagation()}>
         
-        {/* HEADER */}
         <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50 rounded-t-xl">
           <h3 className="text-base font-bold text-zinc-900 tracking-tight">Add New Task</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 transition-colors">
@@ -84,26 +90,16 @@ export default function CreateTaskModal({
         <form onSubmit={handleSubmit} className="flex flex-col">
           <div className="p-6 space-y-4">
             
-            {/* INPUT TITLE */}
             <div>
               <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1.5">Task Name <span className="text-red-500">*</span></label>
-              <input 
-                required name="title" autoFocus type="text" 
-                placeholder="Enter task name..." 
-                className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm focus:border-indigo-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all bg-white" 
-              />
+              <input required name="title" autoFocus type="text" placeholder="Enter task name..." className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm focus:border-indigo-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all bg-white" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               
-              {/* DROPDOWN ASSIGNEE */}
               <div className="relative">
                 <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1.5">Assignee</label>
-                <button 
-                  type="button" 
-                  onClick={() => { setIsAssigneeOpen(!isAssigneeOpen); setIsPriorityOpen(false); }}
-                  className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm flex items-center justify-between bg-white hover:bg-zinc-50 transition-colors outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                >
+                <button type="button" onClick={() => { setIsAssigneeOpen(!isAssigneeOpen); setIsPriorityOpen(false); }} className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm flex items-center justify-between bg-white hover:bg-zinc-50 transition-colors outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                   {selectedMember ? (
                     <div className="flex items-center gap-2 overflow-hidden">
                       {selectedMember.avatar_url ? (
@@ -150,23 +146,14 @@ export default function CreateTaskModal({
                 )}
               </div>
 
-              {/* INPUT DUE DATE */}
               <div>
                 <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1.5">Due Date</label>
-                <input 
-                  name="due_date" type="date" 
-                  className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm focus:border-indigo-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all bg-white text-zinc-700" 
-                />
+                <input name="due_date" type="date" className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm focus:border-indigo-500 outline-none focus:ring-1 focus:ring-indigo-500 transition-all bg-white text-zinc-700" />
               </div>
 
-              {/* DROPDOWN PRIORITY */}
               <div className="relative">
                 <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1.5">Priority</label>
-                <button 
-                  type="button" 
-                  onClick={() => { setIsPriorityOpen(!isPriorityOpen); setIsAssigneeOpen(false); }}
-                  className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm flex items-center justify-between bg-white hover:bg-zinc-50 transition-colors outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                >
+                <button type="button" onClick={() => { setIsPriorityOpen(!isPriorityOpen); setIsAssigneeOpen(false); }} className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm flex items-center justify-between bg-white hover:bg-zinc-50 transition-colors outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
                   <div className="flex items-center gap-2">
                     <svg className={`w-3.5 h-3.5 ${priority === 'High' ? 'text-amber-500' : priority === 'Urgent' ? 'text-red-500' : 'text-zinc-400'}`} fill={priority !== 'Normal' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
                     <span className={`font-medium ${priority === 'Urgent' ? 'text-red-600' : priority === 'High' ? 'text-amber-600' : 'text-zinc-700'}`}>{priority}</span>

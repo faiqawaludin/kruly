@@ -18,7 +18,7 @@ export default function SetPasswordPage() {
     try {
       // 1. Dapatkan user yang sedang aktif (yang masuk dari Magic Link)
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Anda belum masuk secara sah.")
+      if (!user) throw new Error("You are not registered.")
 
       // 2. Set/Update Password-nya
       if (password) {
@@ -40,7 +40,7 @@ export default function SetPasswordPage() {
       router.push("/dashboard")
       router.refresh()
     } catch (error: any) {
-      alert("Gagal menyimpan: " + error.message)
+      alert("Failed to save: " + error.message)
       setIsLoading(false)
     }
   }
@@ -50,37 +50,37 @@ export default function SetPasswordPage() {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-zinc-200">
         
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-zinc-900 tracking-tight">Selamat Datang di Kruly!</h1>
-          <p className="text-sm text-zinc-500 mt-2">Satu langkah lagi sebelum kamu bisa mulai berkolaborasi.</p>
+          <h1 className="text-3xl font-black text-zinc-900 tracking-tight">Welcome to Kruly.</h1>
+          <p className="text-sm text-zinc-500 mt-2">One more step before you can start collaborating.</p>
         </div>
 
         <form onSubmit={handleUpdate} className="space-y-5">
           <div>
-            <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1">Nama Lengkap</label>
+            <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1">Name</label>
             <input 
               type="text" required autoFocus
               value={fullName} onChange={e => setFullName(e.target.value)}
-              placeholder="Fulan bin Fulan"
+              placeholder=""
               className="w-full h-11 border border-zinc-300 rounded-lg px-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
             />
           </div>
 
           <div>
-            <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1">Buat Password Baru</label>
+            <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide block mb-1">Create a Password</label>
             <input 
               type="password" required minLength={6}
               value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="Minimal 6 karakter..."
+              placeholder="At least 6 characters..."
               className="w-full h-11 border border-zinc-300 rounded-lg px-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" 
             />
-            <p className="text-[10px] text-zinc-400 mt-1.5 italic">Password ini akan digunakan untuk login kamu berikutnya.</p>
+            <p className="text-[10px] text-zinc-400 mt-1.5 italic">This password will be used the next time you log in.</p>
           </div>
 
           <button 
             type="submit" disabled={isLoading}
             className="w-full h-11 bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-bold rounded-lg mt-4 transition-colors disabled:opacity-50"
           >
-            {isLoading ? "Menyimpan..." : "Simpan & Masuk ke Dashboard"}
+            {isLoading ? "Saving..." : "Sign Up"}
           </button>
         </form>
 

@@ -22,10 +22,10 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setErrorMsg("")
+    setErrorMsg("Error")
     
     if (!email || !password) {
-      setErrorMsg("Email dan password wajib diisi")
+      setErrorMsg("Email and Password are required")
       setLoading(false)
       return
     }
@@ -47,7 +47,7 @@ export default function LoginPage() {
 
   const handleMagicLink = async () => {
     if (!email) {
-      setErrorMsg("Email wajib diisi untuk menggunakan Magic Link")
+      setErrorMsg("You must enter your email address to send an invite link")
       return
     }
     
@@ -114,7 +114,7 @@ export default function LoginPage() {
 
             <div className="flex flex-col gap-2 pt-2">
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Processing..." : "Log in"}
+                {loading ? "Logging in..." : "Log in"}
               </Button>
               
               <div className="relative text-center text-sm my-2">
