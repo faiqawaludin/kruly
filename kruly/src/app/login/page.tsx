@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -16,13 +16,35 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState("")
   
   const router = useRouter()
-  // Panggil client supabase di dalam komponen
   const supabase = createClient()
+
+  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN & MAGIC LINK
+  useEffect(() => {
+    const checkInviteLink = async () => {
+      const hash = window.location.hash
+      
+      if (hash && hash.includes("access_token")) {
+        // Beri sedikit waktu agar Supabase selesai mengeset sesi di background
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (session) {
+           if (hash.includes("type=invite")) {
+             router.push("/set-password")
+           } else {
+             router.push("/dashboard")
+           }
+        }
+      }
+    }
+    
+    checkInviteLink()
+  }, [router, supabase])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setErrorMsg("Error")
+    setErrorMsg("") // 🔴 FIX 2: Kosongkan pesan error di awal, jangan hardcode "Error"
+    setSuccessMsg("")
     
     if (!email || !password) {
       setErrorMsg("Email and Password are required")
@@ -39,7 +61,6 @@ export default function LoginPage() {
       setErrorMsg(error.message)
       setLoading(false)
     } else {
-      // Refresh router untuk memastikan middleware berjalan, lalu pindah halaman
       router.refresh()
       router.push("/dashboard")
     }
