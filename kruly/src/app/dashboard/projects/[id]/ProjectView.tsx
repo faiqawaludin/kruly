@@ -719,7 +719,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
       <CreateLinkModal projectId={localProject?.id} isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} />
       <CreateTaskModal projectId={localProject?.id} members={members} isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
-      <EditProjectModal project={localProject} isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} />
+      <EditProjectModal projectId={localProject?.id} isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} />
 
     </div>
   )
