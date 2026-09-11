@@ -211,7 +211,7 @@ export default function SpaceView({ workspace = {}, projects = [], tasks = [], m
                         <Tooltip 
                           cursor={{fill: '#f4f4f5'}}
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                          formatter={(value: number, name: string) => [value, name === 'active' ? 'Tugas Aktif' : 'Total Tugas']}
+                          formatter={(value: any, name: any) => [value, name === 'active' ? 'Tugas Aktif' : 'Total Tugas']}
                         />
                         <Bar dataKey="active" radius={[0, 4, 4, 0]} barSize={28}>
                           <LabelList dataKey="active" position="right" fill="#4f46e5" fontSize={13} fontWeight="bold" offset={10} />
