@@ -64,8 +64,8 @@ export default function ProjectView({ project, tasks, links, members }: any) {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
   
-  // 🔴 STATE MODAL APPROVE TASK BARU
-  const [approveModalTask, setApproveModalTask] = useState<any>(null) // Menyimpan Task ID tunggal atau Array (Bulk)
+  // STATE MODAL APPROVE TASK BARU
+  const [approveModalTask, setApproveModalTask] = useState<any>(null)
 
   const [editingCell, setEditingCell] = useState<{ id: string, field: string } | null>(null)
   const [activeDropdown, setActiveDropdown] = useState<{ id: string, type: string } | null>(null)
@@ -100,7 +100,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
   const clearSelection = () => setSelectedTasks(new Set())
 
-  // 🔴 LOGIKA UPDATE DATA YANG DIPERBARUI (Menerima Objek Kolom & Nilai)
   const handleUpdateTask = async (taskId: string | string[], updates: any) => {
     const idsToUpdate = Array.isArray(taskId) ? taskId : [taskId]
     
@@ -269,19 +268,15 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
                   {group.data.map((task: any) => {
                     const isSelected = selectedTasks.has(task.id)
-                    const isEditing = editingCell?.id === task.id
-                    const isDropdownOpen = activeDropdown?.id === task.id
+                    const isEditing = !!(editingCell && editingCell.id === task.id)
+                    const isDropdownOpen = !!(activeDropdown && activeDropdown.id === task.id)
                     
-                    // 🔴 LOGIKA WARNA TANGGAL CERDAS (DUE DATE COLOR)
                     let dueDateColorClass = "text-zinc-600";
                     if (task.status === 'Completed') {
-                      // Jika selesai, coret tulisan dan beri warna abu-abu pudar
                       dueDateColorClass = "text-zinc-400 line-through opacity-80 font-medium";
                     } else if (!task.due_date) {
-                      // Jika belum diatur dan belum selesai, warna merah peringatan
                       dueDateColorClass = "text-red-500 font-medium";
                     } else {
-                      // Kalkulasi telat (Midnight ke Midnight)
                       const today = new Date(); today.setHours(0,0,0,0);
                       const due = new Date(task.due_date); due.setHours(0,0,0,0);
                       
@@ -302,7 +297,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                               <StatusIcon status={task.status} />
                             </div>
 
-                            {isEditing && editingCell.field === 'status' && (
+                            {isEditing && editingCell?.field === 'status' && (
                               <div className="absolute top-full mt-2 left-0 w-64 bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl py-3 flex flex-col z-50 animate-in fade-in zoom-in-95 duration-100" onClick={(e) => e.stopPropagation()}>
                                 <div className="px-4 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Not Started</div>
                                 <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { status: 'Open' }); }}>
@@ -315,7 +310,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                                   </button>
                                 ))}
                                 <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Done</div>
-                                {/* 🔴 PINTU MASUK MODAL APPROVE: Saat user memilih status Completed, buka modal! */}
                                 <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); setEditingCell(null); setApproveModalTask(task); }}>
                                   <StatusIcon status="Completed" className="w-5 h-5" /> <span className="text-emerald-400 font-bold text-sm">APPROVED</span>
                                 </button>
@@ -323,7 +317,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                             )}
                           </div>
 
-                          {isEditing && editingCell.field === 'title' ? (
+                          {isEditing && editingCell?.field === 'title' ? (
                             <input 
                               autoFocus className="w-full text-sm border border-indigo-400 rounded px-1.5 py-0.5 outline-none shadow-sm" defaultValue={task.title}
                               onBlur={(e) => { if (e.target.value && e.target.value !== task.title) handleUpdateTask(task.id, { title: e.target.value }); else setEditingCell(null) }}
@@ -364,7 +358,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                             )}
                           </div>
 
-                          {isEditing && editingCell.field === 'assignee' && (
+                          {isEditing && editingCell?.field === 'assignee' && (
                             <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-48 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 text-sm z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
                               <button type="button" className="w-full text-left px-3 py-2 hover:bg-zinc-50 text-xs text-zinc-600 border-b border-zinc-100" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { assignee_id: null }); }}>Unassigned</button>
                               {members?.map((m: any) => (
@@ -384,7 +378,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                         </div>
                         
                         <div className="col-span-2 flex items-center justify-center relative h-full">
-                          {isEditing && editingCell.field === 'dueDate' ? (
+                          {isEditing && editingCell?.field === 'dueDate' ? (
                             <input 
                               type="date" autoFocus className="absolute z-50 border border-indigo-400 rounded shadow-lg bg-white px-2 py-1 text-xs outline-none"
                               defaultValue={task.due_date ? task.due_date.split('T')[0] : ''}
@@ -400,10 +394,14 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
                         <div className="col-span-1 flex items-center justify-center relative h-full">
                           <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'priority' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
-                            <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors ${task.status === 'Completed' ? 'opacity-40 grayscale' : ''}`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" title={`Priority: ${task.priority || 'Normal'}`}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+                            {/* Memperbaiki Type Error SVG title dengan memberikan elemen span sebagai wrapper title jika diperlukan, atau menghapusnya jika tdk penting */}
+                            <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors ${task.status === 'Completed' ? 'opacity-40 grayscale' : ''}`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                              <title>Priority: {task.priority || 'Normal'}</title>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                            </svg>
                           </div>
 
-                          {isEditing && editingCell.field === 'priority' && (
+                          {isEditing && editingCell?.field === 'priority' && (
                             <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-28 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
                               {['Normal', 'High', 'Urgent'].map(p => (
                                 <button type="button" key={p} className="text-left px-3 py-1.5 hover:bg-zinc-50 text-xs flex gap-2 items-center" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { priority: p }); }}>
@@ -431,7 +429,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                             </div>
                           )}
 
-                          {isEditing && editingCell.field === 'document' && (
+                          {isEditing && editingCell?.field === 'document' && (
                             <form 
                               onSubmit={(e) => {
                                 e.preventDefault();
@@ -477,7 +475,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           </div>
         )}
 
-        {/* --- TAB 3: BOARD (Placeholder) --- */}
         {activeTab === 'board' && (
           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50 mt-4">
             <svg className="w-10 h-10 text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
@@ -486,13 +483,11 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           </div>
         )}
 
-        {/* --- TAB 4: GANTT CHART --- */}
         {activeTab === 'gantt' && (
           <div className="mt-4 bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
             <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50/50">
               <h3 className="text-sm font-bold text-zinc-800">Gantt Chart Timeline</h3>
               
-              {/* Legenda Warna */}
               <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                 <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-blue-500"></div> In Progress</span>
                 <span className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-amber-500"></div> Review</span>
@@ -511,7 +506,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
             ) : (
               <div className="flex w-full overflow-x-auto custom-scrollbar relative">
                 
-                {/* Bagian Kiri: Daftar Task (Sticky/Membeku) */}
                 <div className="w-64 shrink-0 border-r border-zinc-200 bg-white sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                   <div className="h-14 border-b border-zinc-200 flex items-center px-4 text-[10px] font-bold tracking-wider text-zinc-400 uppercase bg-zinc-50/80">
                     Nama Task
@@ -525,10 +519,8 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                   </div>
                 </div>
 
-                {/* Bagian Kanan: Garis Waktu (Timeline) */}
                 <div className="flex flex-col relative" style={{ width: `${totalDays * 45}px`, minWidth: '600px' }}>
                   
-                  {/* Deretan Tanggal */}
                   <div className="h-14 border-b border-zinc-200 bg-zinc-50/80 flex relative">
                     {daysArray.map((d, i) => {
                       const isToday = new Date().toDateString() === d.toDateString();
@@ -544,7 +536,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                     })}
                   </div>
 
-                  {/* Area Warna-Warni Bar Task */}
                   <div className="flex flex-col relative bg-zinc-50/30 pb-4">
                     {ganttTasks.map((task: any) => {
                       const taskStart = new Date(task.created_at || task.due_date).getTime();
@@ -587,7 +578,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
         )}
       </div>
 
-      {/* MULTIPLE CHOICE TOOLBAR */}
       {selectedTasks.size > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 text-white rounded-lg shadow-2xl px-5 py-3 flex items-center gap-6 animate-in slide-in-from-bottom-5 duration-300">
           <div className="flex items-center gap-3 border-r border-zinc-700 pr-5">
@@ -607,7 +597,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                       <StatusIcon status={opt} className="w-5 h-5" /> <span>{opt}</span>
                     </button>
                   ))}
-                  {/* 🔴 PINTU MASUK MODAL BULK APPROVE */}
                   <button type="button" className="text-left px-4 py-2 hover:bg-zinc-700/50 text-sm flex gap-3 items-center text-emerald-400 font-bold border-t border-zinc-700 mt-1 pt-3" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); setApproveModalTask(Array.from(selectedTasks)); }}>
                     <StatusIcon status="Completed" className="w-5 h-5" /> <span>APPROVED</span>
                   </button>
@@ -671,27 +660,23 @@ export default function ProjectView({ project, tasks, links, members }: any) {
         </div>
       )}
 
-      {/* 🔴 MODAL APPROVE TASK (Tanggal Penyelesaian) */}
       {approveModalTask && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setApproveModalTask(null)}>
           <form 
             onSubmit={(e) => {
               e.preventDefault();
-              // Ambil nilai tanggal dari form
               let dateVal = new FormData(e.currentTarget).get('approveDate') as string;
               if (dateVal) {
-                // Konversi tanggal yang dipilih ke format Timestamp ISO (Menyertakan Jam) agar valid di database
                 const dt = new Date(dateVal);
-                dt.setHours(23, 59, 59); // Set ke jam 23:59 hari itu agar dianggap selesai di hari tersebut
+                dt.setHours(23, 59, 59);
                 dateVal = dt.toISOString();
               } else {
-                dateVal = new Date().toISOString(); // Fallback ke hari ini
+                dateVal = new Date().toISOString();
               }
               
               const isBulk = Array.isArray(approveModalTask);
               const taskIds = isBulk ? approveModalTask : approveModalTask.id;
               
-              // Simpan Status 'Completed' SEKALI GUS dengan Tanggal Penyelesaian (completed_at)
               handleUpdateTask(taskIds, { 
                 status: 'Completed', 
                 completed_at: dateVal 
@@ -714,7 +699,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
             
             <div className="p-6">
               <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide mb-2 block">Tanggal Approve (Penyelesaian)</label>
-              {/* Default otomatis menunjuk ke Hari Ini */}
               <input 
                 name="approveDate" 
                 type="date" 
@@ -733,8 +717,8 @@ export default function ProjectView({ project, tasks, links, members }: any) {
         </div>
       )}
 
-      <CreateLinkModal projectId={project?.id} isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} />
-      <CreateTaskModal projectId={project?.id} members={members} isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
+      <CreateLinkModal projectId={localProject?.id} isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} />
+      <CreateTaskModal projectId={localProject?.id} members={members} isOpen={isTaskModalOpen} onClose={() => setIsTaskModalOpen(false)} />
       <EditProjectModal project={localProject} isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} />
 
     </div>
