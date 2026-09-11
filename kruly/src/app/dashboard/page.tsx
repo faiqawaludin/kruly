@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server"
 import DashboardFilters from "./DashboardFilters"
-import SlaPieChart from "./SlaPieChart"
+import SlaPerformancePanel from "./SlaPerformancePanel" // 🔴 IMPORT PANEL PINTAR KITA
 import SpaceCardList from "./SpaceCardList"
 
 export const dynamic = 'force-dynamic'
@@ -28,13 +28,55 @@ export default async function DashboardPage({
   const isAdmin = userRole === 'admin'
   const finalPic = isAdmin ? selectedPic : user?.id
 
+  // 1. Ambil Kpi Keseluruhan
   const { data: kpiData } = await supabase.rpc('get_dashboard_kpi', {
     p_workspace_id: null, 
     p_year: selectedYear,
     p_assignee_id: finalPic
   })
 
-  // Ekstrak data
+  // 2. LOGIKA BARU: Hitung SLA By Member
+  let memberData: any[] = []
+  if (isAdmin) {
+    // Ambil semua task dan profile untuk diolah
+    const { data: tasks } = await supabase.from('tasks').select('assignee_id, status, due_date').not('assignee_id', 'is', null)
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, avatar_url')
+
+    if (tasks && profiles) {
+      const today = new Date().getTime();
+      
+      memberData = profiles.map(profile => {
+        const userTasks = tasks.filter(t => t.assignee_id === profile.id);
+        if (userTasks.length === 0) return null;
+
+        let onTime = 0; let notYetOverdue = 0; let overdue = 0;
+
+        userTasks.forEach(task => {
+          if (!task.due_date) return;
+          const dueDate = new Date(task.due_date).getTime();
+          
+          if (task.status === 'Completed') {
+            onTime++; 
+          } else {
+            if (dueDate < today) overdue++;
+            else notYetOverdue++;
+          }
+        });
+
+        const total = onTime + notYetOverdue + overdue;
+        if (total === 0) return null;
+
+        return {
+          id: profile.id,
+          name: profile.full_name || 'Unknown User',
+          avatar: profile.avatar_url,
+          onTime, notYetOverdue, overdue, total
+        }
+      }).filter(Boolean); // Buang yang null (tidak punya task)
+    }
+  }
+
+  // Ekstrak data untuk Box Atas
   const open = kpiData?.open || 0;
   const inProgress = kpiData?.in_progress || 0;
   const review = kpiData?.waiting_review || 0;
@@ -45,7 +87,6 @@ export default async function DashboardPage({
   const late = kpiData?.late_completion || 0;
   const avgLeadTime = kpiData?.avg_lead_time || 0;
 
-  // Grup Kalkulasi
   const totalTask = open + inProgress + review + revision + completed;
   const totalActive = inProgress + review + revision;
 
@@ -55,8 +96,8 @@ export default async function DashboardPage({
       {/* HEADER & FILTER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-200">
         <div>
-          <h1 className="text-5xl font-bold tracking-tight text-zinc-900">Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-1">Overview</p>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Dashboard MoM GMC</h1>
+          <p className="text-sm text-zinc-500 mt-1">Global Overview Performa Task</p>
         </div>
         <div className="flex items-center gap-4">
           <DashboardFilters isAdmin={isAdmin} userId={user?.id as string} />
@@ -65,8 +106,7 @@ export default async function DashboardPage({
 
       {/* --- BARIS 1: 4 PANEL METRIK UTAMA --- */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Panel 1: Total Seluruh Task */}
+        {/* Panel 1 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
           <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Seluruh Task</h3>
           <div className="flex justify-between items-end">
@@ -79,7 +119,7 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {/* Panel 2: Total Task Aktif */}
+        {/* Panel 2 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
           <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Task Aktif</h3>
           <div className="flex justify-between items-end">
@@ -92,7 +132,7 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {/* Panel 3: Total Selesai */}
+        {/* Panel 3 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
           <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Selesai</h3>
           <div className="flex justify-between items-end">
@@ -104,7 +144,7 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {/* Panel 4: Average Lead Time */}
+        {/* Panel 4 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
           <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Avg. Lead Time</h3>
           <div className="flex justify-between items-end">
@@ -117,26 +157,25 @@ export default async function DashboardPage({
             </div>
           </div>
         </div>
-
       </div>
 
-      {/* --- BARIS 2: CHARTS (KINI HANYA 2 CHART AGAR LEGA) --- */}
+      {/* --- BARIS 2: CHARTS --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-2">
         
-        {/* KOLOM KIRI (Lebih lebar, ambil 8 kolom dari 12) - Line Chart */}
-        <div className="col-span-1 lg:col-span-8 border border-zinc-300 rounded-xl bg-white p-4 shadow-sm min-h-[280px] flex flex-col">
+        {/* Line Chart */}
+        <div className="col-span-1 lg:col-span-8 border border-zinc-300 rounded-xl bg-white p-4 shadow-sm min-h-[300px] flex flex-col">
           <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Tren & Aktivitas Bulanan</h3>
           <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm border-2 border-dashed border-zinc-200 rounded-md bg-zinc-50/50">
             (Placeholder Line Chart Recharts)
           </div>
         </div>
         
-        {/* KOLOM KANAN (Ambil 4 kolom dari 12) - Pie Chart */}
-        <div className="col-span-1 lg:col-span-4 border border-zinc-300 rounded-xl bg-white p-4 shadow-sm min-h-[280px] flex flex-col">
-          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider text-center mb-2">Overall SLA Performance</h3>
-          <div className="flex-1 flex flex-col justify-center">
-            <SlaPieChart data={kpiData} />
-          </div>
+        {/* 🔴 PANEL PINTAR (SLA PIE CHART / BY MEMBER) */}
+        <div className="col-span-1 lg:col-span-4 border border-zinc-300 rounded-xl bg-white p-4 shadow-sm min-h-[300px] flex flex-col relative overflow-hidden">
+          <SlaPerformancePanel 
+            overallData={kpiData} 
+            memberData={memberData} 
+          />
         </div>
 
       </div>

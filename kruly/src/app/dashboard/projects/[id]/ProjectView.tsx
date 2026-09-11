@@ -64,6 +64,9 @@ export default function ProjectView({ project, tasks, links, members }: any) {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
   
+  // 🔴 STATE MODAL APPROVE TASK BARU
+  const [approveModalTask, setApproveModalTask] = useState<any>(null) // Menyimpan Task ID tunggal atau Array (Bulk)
+
   const [editingCell, setEditingCell] = useState<{ id: string, field: string } | null>(null)
   const [activeDropdown, setActiveDropdown] = useState<{ id: string, type: string } | null>(null)
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false)
@@ -97,13 +100,18 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
   const clearSelection = () => setSelectedTasks(new Set())
 
-  const handleUpdateTask = async (taskId: string | string[], field: string, value: any) => {
+  // 🔴 LOGIKA UPDATE DATA YANG DIPERBARUI (Menerima Objek Kolom & Nilai)
+  const handleUpdateTask = async (taskId: string | string[], updates: any) => {
     const idsToUpdate = Array.isArray(taskId) ? taskId : [taskId]
-    setLocalTasks(prev => prev.map(t => idsToUpdate.includes(t.id) ? { ...t, [field]: value } : t))
+    
+    // Perbarui UI seketika (Optimistic Update)
+    setLocalTasks(prev => prev.map(t => idsToUpdate.includes(t.id) ? { ...t, ...updates } : t))
     setEditingCell(null)
     setActiveDropdown(null)
+    
     try {
-      await supabase.from('tasks').update({ [field]: value }).in('id', idsToUpdate)
+      // Kirim perubahan ke database
+      await supabase.from('tasks').update(updates).in('id', idsToUpdate)
       router.refresh()
     } catch (e: any) {
       console.error(e)
@@ -141,11 +149,8 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
   const workspaceName = localProject?.workspaces?.name || 'Workspace'
 
-  // ==========================================
-  // KALKULASI LOGIKA GANTT CHART
-  // ==========================================
-  const ganttTasks = localTasks.filter(t => t.due_date); // Hanya task yang punya deadline
-  
+  // Logika Kalkulasi Gantt
+  const ganttTasks = localTasks.filter(t => t.due_date);
   let minTime = new Date().getTime();
   let maxTime = new Date().getTime();
 
@@ -154,18 +159,14 @@ export default function ProjectView({ project, tasks, links, members }: any) {
     maxTime = Math.max(...ganttTasks.map(t => new Date(t.due_date).getTime()));
   }
 
-  // Beri jarak visual (Padding) 3 hari sebelum task pertama, dan 7 hari setelah task terakhir
   const PADDING_DAYS_START = 3;
   const PADDING_DAYS_END = 7;
-  
   const startDate = new Date(minTime);
   startDate.setDate(startDate.getDate() - PADDING_DAYS_START);
-  
   const endDate = new Date(maxTime);
   endDate.setDate(endDate.getDate() + PADDING_DAYS_END);
 
   const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-
   const daysArray = Array.from({ length: totalDays }, (_, i) => {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
@@ -227,7 +228,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
       </div>
 
       <div className="pt-2 w-full">
-        {/* --- TAB 1: OVERVIEW --- */}
         {activeTab === 'overview' && (
           <div className="flex flex-col gap-4">
             <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-6">
@@ -242,7 +242,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           </div>
         )}
 
-        {/* --- TAB 2: LIST --- */}
         {activeTab === 'list' && (
           <div className="space-y-8 pb-32 mt-4">
             {groupedTasks
@@ -273,6 +272,23 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                     const isEditing = editingCell?.id === task.id
                     const isDropdownOpen = activeDropdown?.id === task.id
                     
+                    // 🔴 LOGIKA WARNA TANGGAL CERDAS (DUE DATE COLOR)
+                    let dueDateColorClass = "text-zinc-600";
+                    if (task.status === 'Completed') {
+                      // Jika selesai, coret tulisan dan beri warna abu-abu pudar
+                      dueDateColorClass = "text-zinc-400 line-through opacity-80 font-medium";
+                    } else if (!task.due_date) {
+                      // Jika belum diatur dan belum selesai, warna merah peringatan
+                      dueDateColorClass = "text-red-500 font-medium";
+                    } else {
+                      // Kalkulasi telat (Midnight ke Midnight)
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const due = new Date(task.due_date); due.setHours(0,0,0,0);
+                      
+                      if (due < today) dueDateColorClass = "text-red-600 font-bold";
+                      else if (due.getTime() === today.getTime()) dueDateColorClass = "text-amber-500 font-bold";
+                    }
+
                     return (
                       <div key={task.id} className={`relative grid grid-cols-12 gap-4 items-center border-b border-zinc-100 py-1.5 transition-colors group/row ${isSelected ? 'bg-indigo-50/60' : 'hover:bg-zinc-50'}`} style={{ zIndex: isEditing || isDropdownOpen ? 50 : 1 }}>
                         
@@ -289,18 +305,19 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                             {isEditing && editingCell.field === 'status' && (
                               <div className="absolute top-full mt-2 left-0 w-64 bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl py-3 flex flex-col z-50 animate-in fade-in zoom-in-95 duration-100" onClick={(e) => e.stopPropagation()}>
                                 <div className="px-4 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Not Started</div>
-                                <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', 'Open'); }}>
+                                <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { status: 'Open' }); }}>
                                   <StatusIcon status="Open" className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">OPEN</span>
                                 </button>
                                 <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Active</div>
                                 {['In-Progress', 'Waiting for Review', 'Revision'].map(opt => (
-                                  <button type="button" key={opt} className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', opt); }}>
+                                  <button type="button" key={opt} className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { status: opt }); }}>
                                     <StatusIcon status={opt} className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">{opt.toUpperCase()}</span>
                                   </button>
                                 ))}
                                 <div className="px-4 py-1 mt-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Done</div>
-                                <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'status', 'Completed'); }}>
-                                  <StatusIcon status="Completed" className="w-5 h-5" /> <span className="text-zinc-300 text-sm font-medium">APPROVED</span>
+                                {/* 🔴 PINTU MASUK MODAL APPROVE: Saat user memilih status Completed, buka modal! */}
+                                <button type="button" className="text-left px-5 py-2.5 hover:bg-zinc-700/50 flex items-center gap-3 w-full transition-colors" onClick={(e) => { e.stopPropagation(); setEditingCell(null); setApproveModalTask(task); }}>
+                                  <StatusIcon status="Completed" className="w-5 h-5" /> <span className="text-emerald-400 font-bold text-sm">APPROVED</span>
                                 </button>
                               </div>
                             )}
@@ -309,11 +326,11 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                           {isEditing && editingCell.field === 'title' ? (
                             <input 
                               autoFocus className="w-full text-sm border border-indigo-400 rounded px-1.5 py-0.5 outline-none shadow-sm" defaultValue={task.title}
-                              onBlur={(e) => { if (e.target.value && e.target.value !== task.title) handleUpdateTask(task.id, 'title', e.target.value); else setEditingCell(null) }}
+                              onBlur={(e) => { if (e.target.value && e.target.value !== task.title) handleUpdateTask(task.id, { title: e.target.value }); else setEditingCell(null) }}
                               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                             />
                           ) : (
-                            <span onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'title' }); }} className="truncate hover:text-indigo-600 cursor-pointer px-1.5 py-1 -ml-1.5 rounded hover:bg-zinc-200/50 transition-colors flex-1 ml-1">
+                            <span onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'title' }); }} className={`truncate hover:text-indigo-600 cursor-pointer px-1.5 py-1 -ml-1.5 rounded hover:bg-zinc-200/50 transition-colors flex-1 ml-1 ${task.status === 'Completed' ? 'text-zinc-500 line-through' : ''}`}>
                               {task.title}
                             </span>
                           )}
@@ -322,9 +339,25 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                         <div className="col-span-2 flex items-center justify-center relative h-full">
                           <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'assignee' }); }} className="cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full max-w-[120px] h-full">
                             {task.assignee_id ? (
-                              <div className="flex items-center gap-2">
-                                <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">{(task.assignee_id || 'U').substring(0, 1).toUpperCase()}</div>
-                                <span className="text-xs text-zinc-600 truncate">User</span>
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                {(() => {
+                                  const assignee = members?.find((m: any) => m.user_id === task.assignee_id);
+                                  const assigneeName = assignee?.full_name || 'User';
+                                  const avatarUrl = assignee?.avatar_url;
+                                  
+                                  return (
+                                    <>
+                                      {avatarUrl ? (
+                                         <img src={avatarUrl} className="w-5 h-5 rounded-full object-cover shrink-0" alt="Avatar" />
+                                      ) : (
+                                         <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                           {assigneeName.substring(0, 1).toUpperCase()}
+                                         </div>
+                                      )}
+                                      <span className={`text-xs truncate ${task.status === 'Completed' ? 'text-zinc-400' : 'text-zinc-600'}`}>{assigneeName}</span>
+                                    </>
+                                  )
+                                })()}
                               </div>
                             ) : (
                               <span className="text-[11px] text-zinc-400 flex items-center justify-center gap-1 hover:text-indigo-600"><svg className="w-3.5 h-3.5 border border-dashed border-zinc-400 rounded-full p-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>Assign</span>
@@ -333,10 +366,17 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
                           {isEditing && editingCell.field === 'assignee' && (
                             <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-48 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 text-sm z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
-                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-zinc-50 text-xs text-zinc-600 border-b border-zinc-100" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'assignee_id', null); }}>Unassigned</button>
+                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-zinc-50 text-xs text-zinc-600 border-b border-zinc-100" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { assignee_id: null }); }}>Unassigned</button>
                               {members?.map((m: any) => (
-                                <button type="button" key={m.user_id} className="text-left px-3 py-1.5 hover:bg-zinc-50 flex items-center gap-2 text-xs font-medium w-full" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'assignee_id', m.user_id); }}>
-                                  <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{(m.user_id || 'U').substring(0,1).toUpperCase()}</div> User {m.user_id.substring(0,4)}
+                                <button type="button" key={m.user_id} className="text-left px-3 py-1.5 hover:bg-zinc-50 flex items-center gap-2 text-xs font-medium w-full" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { assignee_id: m.user_id }); }}>
+                                  {m.avatar_url ? (
+                                    <img src={m.avatar_url} className="w-5 h-5 rounded-full object-cover shrink-0" alt="Avatar" />
+                                  ) : (
+                                    <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                      {(m.full_name || 'U').substring(0,1).toUpperCase()}
+                                    </div>
+                                  )}
+                                  {m.full_name || `User ${m.user_id.substring(0,4)}`}
                                 </button>
                               ))}
                             </div>
@@ -348,11 +388,11 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                             <input 
                               type="date" autoFocus className="absolute z-50 border border-indigo-400 rounded shadow-lg bg-white px-2 py-1 text-xs outline-none"
                               defaultValue={task.due_date ? task.due_date.split('T')[0] : ''}
-                              onChange={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'due_date', e.target.value || null); }}
+                              onChange={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { due_date: e.target.value || null }); }}
                               onClick={e => e.stopPropagation()}
                             />
                           ) : (
-                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'dueDate' }); }} className={`cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors text-xs text-center w-full max-w-[100px] h-full flex items-center justify-center ${!task.due_date || new Date(task.due_date) < new Date() ? 'text-red-500 font-medium' : 'text-zinc-600'}`}>
+                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'dueDate' }); }} className={`cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors text-xs text-center w-full max-w-[100px] h-full flex items-center justify-center ${dueDateColorClass}`}>
                               {formatClickUpDate(task.due_date)}
                             </div>
                           )}
@@ -360,13 +400,13 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
                         <div className="col-span-1 flex items-center justify-center relative h-full">
                           <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'priority' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
-                            <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" title={`Priority: ${task.priority || 'Normal'}`}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+                            <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors ${task.status === 'Completed' ? 'opacity-40 grayscale' : ''}`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" title={`Priority: ${task.priority || 'Normal'}`}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
                           </div>
 
                           {isEditing && editingCell.field === 'priority' && (
                             <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-28 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
                               {['Normal', 'High', 'Urgent'].map(p => (
-                                <button type="button" key={p} className="text-left px-3 py-1.5 hover:bg-zinc-50 text-xs flex gap-2 items-center" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, 'priority', p); }}>
+                                <button type="button" key={p} className="text-left px-3 py-1.5 hover:bg-zinc-50 text-xs flex gap-2 items-center" onClick={(e) => { e.stopPropagation(); handleUpdateTask(task.id, { priority: p }); }}>
                                   <svg className={`w-3 h-3 ${p === 'High' ? 'text-amber-500' : p === 'Urgent' ? 'text-red-500' : 'text-zinc-400'}`} fill={p !== 'Normal' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
                                   <span className={p === 'Urgent' ? 'text-red-600 font-medium' : p === 'High' ? 'text-amber-600 font-medium' : 'text-zinc-600'}>{p}</span>
                                 </button>
@@ -378,7 +418,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                         <div className="col-span-1 flex items-center justify-center relative h-full">
                           {task.document_url ? (
                             <div className="flex items-center gap-1.5 group/doc h-full justify-center">
-                              <a href={task.document_url} target="_blank" rel="noreferrer" className="p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center" title="Buka Dokumen">
+                              <a href={task.document_url} target="_blank" rel="noreferrer" className={`p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center ${task.status === 'Completed' ? 'opacity-50 grayscale' : ''}`} title="Buka Dokumen">
                                 <DocumentIcon url={task.document_url} className="w-4 h-4" />
                               </a>
                               <button onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="text-zinc-400 hover:text-zinc-700 opacity-0 group-hover/doc:opacity-100 flex items-center justify-center p-1 rounded hover:bg-zinc-200/50" title="Edit Link">
@@ -396,7 +436,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                               onSubmit={(e) => {
                                 e.preventDefault();
                                 const val = new FormData(e.currentTarget).get('docUrl') as string;
-                                handleUpdateTask(task.id, 'document_url', val || null);
+                                handleUpdateTask(task.id, { document_url: val || null });
                               }}
                               className="absolute top-full right-0 mt-1 w-64 bg-white border border-zinc-200 shadow-xl rounded-lg p-2 flex gap-2 z-50 animate-in zoom-in-95 duration-100" 
                               onClick={e => e.stopPropagation()}
@@ -446,7 +486,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           </div>
         )}
 
-        {/* --- TAB 4: GANTT CHART (BARU) --- */}
+        {/* --- TAB 4: GANTT CHART --- */}
         {activeTab === 'gantt' && (
           <div className="mt-4 bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
             <div className="p-4 border-b border-zinc-200 flex justify-between items-center bg-zinc-50/50">
@@ -498,8 +538,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                           <span className={`text-[13px] font-bold mt-0.5 ${isToday ? 'text-white bg-indigo-600 w-6 h-6 flex items-center justify-center rounded-full shadow-sm' : 'text-zinc-700'}`}>
                             {d.getDate()}
                           </span>
-                          
-                          {/* Garis Vertikal Hari Ini (Today Line) */}
                           {isToday && <div className="absolute top-14 left-1/2 w-0.5 h-[1000px] bg-indigo-500/30 z-0 -translate-x-1/2"></div>}
                         </div>
                       )
@@ -509,7 +547,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                   {/* Area Warna-Warni Bar Task */}
                   <div className="flex flex-col relative bg-zinc-50/30 pb-4">
                     {ganttTasks.map((task: any) => {
-                      // Hitung panjang waktu
                       const taskStart = new Date(task.created_at || task.due_date).getTime();
                       const taskEnd = new Date(task.due_date).getTime();
                       
@@ -517,12 +554,10 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                       let leftPercent = ((taskStart - startDate.getTime()) / totalSpanMs) * 100;
                       let widthPercent = ((taskEnd - taskStart) / totalSpanMs) * 100;
 
-                      // Proteksi agar Bar minimal memakan 1 kotak (1 hari) meskipun dikerjakan dan selesai di hari yang sama
                       if (widthPercent < (100 / totalDays)) widthPercent = 100 / totalDays; 
                       if (leftPercent < 0) leftPercent = 0;
                       if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
 
-                      // Tentukan Warna Bar Berdasarkan Status Task
                       let barColor = 'bg-zinc-400';
                       if (task.status === 'Completed') barColor = 'bg-emerald-500';
                       else if (task.status === 'In-Progress') barColor = 'bg-blue-500';
@@ -531,29 +566,20 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
                       return (
                         <div key={`bar-${task.id}`} className="h-12 border-b border-zinc-100/50 relative group">
-                          
-                          {/* Garis Kotak-Kotak Background */}
                           <div className="absolute inset-0 flex">
-                            {daysArray.map((_, i) => (
-                               <div key={i} className="flex-1 border-r border-zinc-200/30"></div>
-                            ))}
+                            {daysArray.map((_, i) => (<div key={i} className="flex-1 border-r border-zinc-200/30"></div>))}
                           </div>
-
-                          {/* Balok Warna (Task Bar) */}
                           <div 
-                            className={`absolute top-2 h-8 rounded-md shadow-sm ${barColor} hover:opacity-80 transition-all cursor-pointer flex items-center px-2 z-10`}
+                            className={`absolute top-2 h-8 rounded-md shadow-sm ${barColor} hover:opacity-80 transition-all cursor-pointer flex items-center px-2 z-10 ${task.status === 'Completed' ? 'opacity-60' : ''}`}
                             style={{ left: `${leftPercent}%`, width: `${widthPercent}%` }}
                             title={`${task.title}\nStatus: ${task.status}\nDue Date: ${new Date(task.due_date).toLocaleDateString()}`}
                           >
-                            <span className="text-[10px] font-bold text-white truncate drop-shadow-sm">
-                              {task.title}
-                            </span>
+                            <span className="text-[10px] font-bold text-white truncate drop-shadow-sm">{task.title}</span>
                           </div>
                         </div>
                       )
                     })}
                   </div>
-
                 </div>
               </div>
             )}
@@ -576,11 +602,15 @@ export default function ProjectView({ project, tasks, links, members }: any) {
               <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown?.type === 'bulk_status' ? null : { id: 'bulk', type: 'bulk_status' }); }} className="flex items-center gap-1.5 text-zinc-300 hover:text-indigo-400 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Status</button>
               {activeDropdown?.type === 'bulk_status' && (
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-zinc-800 border border-zinc-700 shadow-xl rounded-xl py-2 flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
-                  {['Open', 'In-Progress', 'Waiting for Review', 'Revision', 'Completed'].map(opt => (
-                    <button type="button" key={opt} className="text-left px-4 py-2 hover:bg-zinc-700/50 text-sm flex gap-3 items-center text-zinc-300" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'status', opt); }}>
+                  {['Open', 'In-Progress', 'Waiting for Review', 'Revision'].map(opt => (
+                    <button type="button" key={opt} className="text-left px-4 py-2 hover:bg-zinc-700/50 text-sm flex gap-3 items-center text-zinc-300" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), { status: opt }); }}>
                       <StatusIcon status={opt} className="w-5 h-5" /> <span>{opt}</span>
                     </button>
                   ))}
+                  {/* 🔴 PINTU MASUK MODAL BULK APPROVE */}
+                  <button type="button" className="text-left px-4 py-2 hover:bg-zinc-700/50 text-sm flex gap-3 items-center text-emerald-400 font-bold border-t border-zinc-700 mt-1 pt-3" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); setApproveModalTask(Array.from(selectedTasks)); }}>
+                    <StatusIcon status="Completed" className="w-5 h-5" /> <span>APPROVED</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -589,10 +619,15 @@ export default function ProjectView({ project, tasks, links, members }: any) {
               <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown?.type === 'bulk_assignee' ? null : { id: 'bulk', type: 'bulk_assignee' }); }} className="flex items-center gap-1.5 text-zinc-300 hover:text-indigo-400 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg> Assignees</button>
               {activeDropdown?.type === 'bulk_assignee' && (
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-zinc-800 border border-zinc-700 shadow-xl rounded-xl py-2 flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
-                  <button type="button" className="text-left px-4 py-2 hover:bg-zinc-700/50 text-xs text-zinc-400 border-b border-zinc-700 mb-1" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'assignee_id', null); }}>Unassigned</button>
+                  <button type="button" className="text-left px-4 py-2 hover:bg-zinc-700/50 text-xs text-zinc-400 border-b border-zinc-700 mb-1" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), { assignee_id: null }); }}>Unassigned</button>
                   {members?.map((m: any) => (
-                    <button type="button" key={m.user_id} className="text-left px-3 py-1.5 hover:bg-zinc-700/50 flex items-center gap-2 text-xs font-medium w-full" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'assignee_id', m.user_id); }}>
-                      <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{(m.user_id || 'U').substring(0,1).toUpperCase()}</div> User {m.user_id.substring(0,4)}
+                    <button type="button" key={m.user_id} className="text-left px-3 py-1.5 hover:bg-zinc-700/50 flex items-center gap-2 text-xs font-medium w-full" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), { assignee_id: m.user_id }); }}>
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} className="w-5 h-5 rounded-full object-cover shrink-0" alt="Avatar" />
+                      ) : (
+                        <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">{(m.full_name || 'U').substring(0,1).toUpperCase()}</div>
+                      )}
+                      {m.full_name || `User ${m.user_id.substring(0,4)}`}
                     </button>
                   ))}
                 </div>
@@ -606,7 +641,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                   onSubmit={(e) => {
                     e.preventDefault();
                     const val = new FormData(e.currentTarget).get('bulkDate') as string;
-                    handleUpdateTask(Array.from(selectedTasks), 'due_date', val || null);
+                    handleUpdateTask(Array.from(selectedTasks), { due_date: val || null });
                   }}
                   className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 shadow-xl rounded-xl p-2.5 z-[60] flex gap-2" 
                   onClick={e => e.stopPropagation()}
@@ -622,7 +657,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
               {activeDropdown?.type === 'bulk_priority' && (
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-32 bg-zinc-800 border border-zinc-700 shadow-xl rounded-xl py-2 flex flex-col z-[60]" onClick={e => e.stopPropagation()}>
                   {['Normal', 'High', 'Urgent'].map(p => (
-                    <button type="button" key={p} className="text-left px-4 py-2 hover:bg-zinc-700/50 flex gap-3 items-center text-xs" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), 'priority', p); }}>
+                    <button type="button" key={p} className="text-left px-4 py-2 hover:bg-zinc-700/50 flex gap-3 items-center text-xs" onClick={(e) => { e.stopPropagation(); handleUpdateTask(Array.from(selectedTasks), { priority: p }); }}>
                       <svg className={`w-4 h-4 ${p === 'High' ? 'text-amber-500' : p === 'Urgent' ? 'text-red-500' : 'text-zinc-500'}`} fill={p !== 'Normal' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
                       <span className={p === 'Urgent' ? 'text-red-400 font-medium' : p === 'High' ? 'text-amber-400 font-medium' : 'text-zinc-300'}>{p}</span>
                     </button>
@@ -633,6 +668,68 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
             <button onClick={(e) => { e.stopPropagation(); handleBulkDelete(); }} className="flex items-center gap-1.5 text-zinc-300 hover:text-red-400 transition-colors ml-2 border-l border-zinc-700 pl-4"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg> Delete</button>
           </div>
+        </div>
+      )}
+
+      {/* 🔴 MODAL APPROVE TASK (Tanggal Penyelesaian) */}
+      {approveModalTask && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setApproveModalTask(null)}>
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              // Ambil nilai tanggal dari form
+              let dateVal = new FormData(e.currentTarget).get('approveDate') as string;
+              if (dateVal) {
+                // Konversi tanggal yang dipilih ke format Timestamp ISO (Menyertakan Jam) agar valid di database
+                const dt = new Date(dateVal);
+                dt.setHours(23, 59, 59); // Set ke jam 23:59 hari itu agar dianggap selesai di hari tersebut
+                dateVal = dt.toISOString();
+              } else {
+                dateVal = new Date().toISOString(); // Fallback ke hari ini
+              }
+              
+              const isBulk = Array.isArray(approveModalTask);
+              const taskIds = isBulk ? approveModalTask : approveModalTask.id;
+              
+              // Simpan Status 'Completed' SEKALI GUS dengan Tanggal Penyelesaian (completed_at)
+              handleUpdateTask(taskIds, { 
+                status: 'Completed', 
+                completed_at: dateVal 
+              });
+              
+              setApproveModalTask(null);
+            }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-zinc-100 bg-emerald-50/50 flex items-center gap-3">
+               <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+               </div>
+               <div>
+                 <h3 className="text-sm font-bold text-zinc-900">Approve Task</h3>
+                 <p className="text-xs text-zinc-500">Tentukan kapan tugas ini diselesaikan.</p>
+               </div>
+            </div>
+            
+            <div className="p-6">
+              <label className="text-xs font-bold text-zinc-700 uppercase tracking-wide mb-2 block">Tanggal Approve (Penyelesaian)</label>
+              {/* Default otomatis menunjuk ke Hari Ini */}
+              <input 
+                name="approveDate" 
+                type="date" 
+                required 
+                defaultValue={new Date().toISOString().split('T')[0]} 
+                className="w-full h-10 border border-zinc-300 rounded-md px-3 text-sm focus:border-emerald-500 outline-none focus:ring-2 focus:ring-emerald-200 transition-all cursor-pointer" 
+              />
+              <p className="text-[10px] text-zinc-400 mt-2 italic">Tanggal ini akan digunakan untuk menghitung performa SLA (On Time / Overdue) di Dashboard.</p>
+            </div>
+            
+            <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex justify-end gap-2">
+              <button type="button" onClick={() => setApproveModalTask(null)} className="px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors">Batal</button>
+              <button type="submit" className="px-4 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md transition-colors shadow-sm">Simpan & Approve</button>
+            </div>
+          </form>
         </div>
       )}
 
