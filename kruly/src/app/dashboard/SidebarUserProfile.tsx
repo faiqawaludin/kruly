@@ -6,14 +6,19 @@ import { createClient } from "@/utils/supabase/client"
 
 export default function SidebarUserProfile({ 
   user, 
-  initialProfile 
+  initialProfile,
+  userRole = "Member" // 🔴 TAMBAHAN: Menerima data Role
 }: { 
   user: any, 
-  initialProfile: any 
+  initialProfile: any,
+  userRole?: string 
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   
   const [fullName, setFullName] = useState(initialProfile?.full_name || "")
   const [avatarUrl, setAvatarUrl] = useState(initialProfile?.avatar_url || "")
@@ -26,37 +31,39 @@ export default function SidebarUserProfile({
   const displayLetter = fullName ? fullName.charAt(0).toUpperCase() : userEmail.charAt(0).toUpperCase()
   const displayName = fullName || userEmail.split('@')[0]
 
-  // ==========================================
-  // FUNGSI UPLOAD FOTO (MAX 1 MB + AUTO DELETE LAMA)
-  // ==========================================
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await supabase.auth.signOut()
+      router.push('/login')
+      router.refresh()
+    } catch (error: any) {
+      alert("Gagal logout: " + error.message)
+      setIsLoggingOut(false)
+    }
+  }
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const file = e.target.files?.[0]
       if (!file) return
       
-      // 🔴 1. VALIDASI UKURAN FILE (Maksimal 1 MB = 1048576 bytes)
       if (file.size > 1 * 1024 * 1024) {
         alert("Peringatan: Ukuran foto terlalu besar! Maksimal 1 MB.")
-        // Reset input file agar bisa pilih ulang
         if (fileInputRef.current) fileInputRef.current.value = ""
         return
       }
 
       setIsUploading(true)
 
-      // 🔴 2. HAPUS FOTO LAMA DARI BUCKET (Jika sebelumnya sudah ada foto)
       if (avatarUrl) {
-        // Ekstrak nama file dari URL (contoh: url.com/.../avatars/namafile123.jpg -> ambil namafile123.jpg)
         const oldFileName = avatarUrl.split('/').pop()
         if (oldFileName) {
-          // Eksekusi penghapusan di background
           await supabase.storage.from('avatars').remove([oldFileName])
         }
       }
 
-      // 🔴 3. UPLOAD FOTO BARU
       const fileExt = file.name.split('.').pop()
-      // Gunakan kombinasi User ID + Waktu sekarang agar namanya selalu unik dan browser tidak menyimpan cache foto lama
       const fileName = `${user.id}-${Date.now()}.${fileExt}` 
 
       const { error: uploadError } = await supabase.storage
@@ -65,9 +72,8 @@ export default function SidebarUserProfile({
 
       if (uploadError) throw uploadError
 
-      // Dapatkan URL publik dari foto tersebut
       const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
-      setAvatarUrl(data.publicUrl) // Langsung tampilkan di layar
+      setAvatarUrl(data.publicUrl) 
       
     } catch (error: any) {
       alert("Gagal upload foto: " + error.message)
@@ -76,7 +82,6 @@ export default function SidebarUserProfile({
     }
   }
 
-  // FUNGSI SIMPAN PROFIL
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
@@ -101,33 +106,71 @@ export default function SidebarUserProfile({
   }
 
   return (
-    <>
-      {/* TOMBOL PROFIL DI POJOK KIRI BAWAH SIDEBAR */}
-      <div 
-        onClick={() => setIsOpen(true)}
-        className="p-4 border-t border-zinc-900 cursor-pointer hover:bg-zinc-900 transition-colors group"
-      >
-        <div className="flex items-center gap-3">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="Profile" className="w-9 h-9 rounded-full object-cover border border-zinc-700 group-hover:border-indigo-500 transition-colors" />
-          ) : (
-            <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-sm text-white group-hover:bg-indigo-500 transition-colors">
-              {displayLetter}
-            </div>
-          )}
-          <div className="overflow-hidden">
-            <p className="text-sm font-bold text-white truncate group-hover:text-indigo-300 transition-colors">{displayName}</p>
-            <p className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Pengaturan Akun</p>
+    <div className="relative w-full">
+      
+      {isMenuOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>
+      )}
+
+      {isMenuOpen && (
+        <div className="absolute bottom-full left-4 mb-2 w-56 bg-zinc-800 border border-zinc-700 shadow-2xl rounded-xl py-1.5 z-50 animate-in slide-in-from-bottom-2 fade-in duration-200">
+          <div className="px-4 py-3 border-b border-zinc-700/50 mb-1 bg-zinc-800/50">
+            <p className="text-sm font-bold text-white truncate">{displayName}</p>
+            <p className="text-[10px] text-zinc-400 truncate mt-0.5">{userEmail}</p>
           </div>
+          
+          <button 
+            onClick={() => { setIsMenuOpen(false); setIsOpen(true); }}
+            className="w-full text-left px-4 py-2 hover:bg-zinc-700/50 text-xs font-medium text-zinc-300 flex items-center gap-2.5 transition-colors"
+          >
+            <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            Pengaturan Profil
+          </button>
+          
+          <button 
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="w-full text-left px-4 py-2 hover:bg-red-500/10 text-xs font-medium text-red-400 flex items-center gap-2.5 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            {isLoggingOut ? "Keluar..." : "Keluar (Logout)"}
+          </button>
+        </div>
+      )}
+
+      <div 
+        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        className="p-4 border-t border-zinc-900 cursor-pointer hover:bg-zinc-900 transition-colors group relative z-50"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 overflow-hidden">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Profile" className="w-9 h-9 rounded-full object-cover shrink-0 border border-zinc-700 group-hover:border-indigo-500 transition-colors" />
+            ) : (
+              <div className="w-9 h-9 rounded-full shrink-0 bg-indigo-600 flex items-center justify-center font-bold text-sm text-white group-hover:bg-indigo-500 transition-colors">
+                {displayLetter}
+              </div>
+            )}
+            <div className="overflow-hidden">
+              <p className="text-sm font-bold text-white truncate group-hover:text-indigo-300 transition-colors">{displayName}</p>
+              
+              {/* 🔴 MENGGANTI "OPSI AKUN" MENJADI ROLE DINAMIS */}
+              <p className={`text-[10px] font-bold uppercase tracking-widest truncate mt-0.5 ${userRole.toLowerCase() === 'admin' ? 'text-indigo-400' : 'text-zinc-500'}`}>
+                {userRole}
+              </p>
+              
+            </div>
+          </div>
+          
+          <svg className={`w-4 h-4 text-zinc-500 group-hover:text-zinc-300 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
         </div>
       </div>
 
-      {/* MODAL PENGATURAN PROFIL */}
       {isOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 text-zinc-900" onClick={() => setIsOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center bg-zinc-50/50">
-              <h3 className="text-lg font-bold">Profil Akun</h3>
+              <h3 className="text-lg font-bold tracking-tight">Profil Akun</h3>
               <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-zinc-700">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -136,7 +179,6 @@ export default function SidebarUserProfile({
             <form onSubmit={handleSaveProfile}>
               <div className="p-6 flex flex-col items-center space-y-6">
                 
-                {/* UPLOAD FOTO */}
                 <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Klik untuk ubah foto (Maks 1 MB)">
                   {avatarUrl ? (
                     <img src={avatarUrl} alt="Avatar" className="w-24 h-24 rounded-full object-cover border-4 border-zinc-100 shadow-sm group-hover:opacity-75 transition-opacity" />
@@ -146,7 +188,6 @@ export default function SidebarUserProfile({
                     </div>
                   )}
                   
-                  {/* Overlay Ikon Kamera */}
                   <div className="absolute inset-0 rounded-full flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
                     {isUploading ? (
                       <span className="text-white text-xs font-bold animate-pulse">Wait...</span>
@@ -170,7 +211,7 @@ export default function SidebarUserProfile({
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Masukkan nama lengkap..."
-                      className="w-full h-10 text-sm border border-zinc-300 rounded-md px-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" 
+                      className="w-full h-10 text-sm border border-zinc-300 rounded-md px-3 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" 
                     />
                   </div>
                 </div>
@@ -186,6 +227,6 @@ export default function SidebarUserProfile({
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }

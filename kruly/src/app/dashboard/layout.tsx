@@ -53,9 +53,13 @@ export default async function DashboardLayout({
           </div>
         </div>
 
-        {/* 🔴 PASANG KOMPONEN PROFIL INTERAKTIF DI SINI */}
+        {/* 🔴 MENGIRIMKAN DATA ROLE KE KOMPONEN PROFIL */}
         {user && (
-          <SidebarUserProfile user={user} initialProfile={userProfile} />
+          <SidebarUserProfile 
+            user={user} 
+            initialProfile={userProfile} 
+            userRole={workspaceMembers?.[0]?.role || 'Member'} 
+          />
         )}
       </aside>
 

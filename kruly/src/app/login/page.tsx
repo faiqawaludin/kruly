@@ -74,9 +74,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Masuk ke Kruly</CardTitle>
+          <CardTitle className="text-2xl font-bold">Kruly.</CardTitle>
           <CardDescription>
-            Internal PM Tool untuk Tim Magang
+            Log in
           </CardDescription>
         </CardHeader>
         <CardContent>
