@@ -65,7 +65,7 @@ export default function LoginPage() {
     if (error) {
       setErrorMsg(error.message)
     } else {
-      setSuccessMsg("Magic Link telah dikirim! Silakan cek email Anda.")
+      setSuccessMsg("The Invite Link has been sent! Please check your email.")
     }
     setLoading(false)
   }
@@ -74,8 +74,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Kruly.</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-4xl font-black">Kruly.</CardTitle>
+          <CardDescription className="text-center">
             Log in
           </CardDescription>
         </CardHeader>
@@ -86,17 +86,20 @@ export default function LoginPage() {
               <Input 
                 id="email" 
                 type="email" 
-                placeholder="nama@perusahaan.com" 
+                placeholder="name@gmail.com" 
+                className="placeholder:italic text-sm border p-2 rounded" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password (Opsional untuk Magic Link)</Label>
+              <Label htmlFor="password">Password</Label>
               <Input 
                 id="password" 
                 type="password"
+                placeholder="......."
+                className="placeholder:italic text-sm border p-2 rounded" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)} 
               />
@@ -111,11 +114,11 @@ export default function LoginPage() {
 
             <div className="flex flex-col gap-2 pt-2">
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Memproses..." : "Masuk dengan Password"}
+                {loading ? "Processing..." : "Log in"}
               </Button>
               
               <div className="relative text-center text-sm my-2">
-                <span className="bg-white px-2 text-zinc-500">ATAU</span>
+                <span className="bg-white px-2 text-zinc-500">OR</span>
                 <div className="absolute inset-0 flex items-center -z-10">
                   <div className="w-full border-t border-zinc-200"></div>
                 </div>
@@ -128,7 +131,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full"
               >
-                Kirim Magic Link
+                Send Invite Link
               </Button>
             </div>
           </form>
