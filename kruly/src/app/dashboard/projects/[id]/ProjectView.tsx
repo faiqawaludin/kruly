@@ -59,12 +59,10 @@ export default function ProjectView({ project, tasks, links, members }: any) {
   const [isMounted, setIsMounted] = useState(false)
   const [activeTab, setActiveTab] = useState('list') 
   
-  // STATE MODAL
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false)
   
-  // STATE MODAL APPROVE TASK BARU
   const [approveModalTask, setApproveModalTask] = useState<any>(null)
 
   const [editingCell, setEditingCell] = useState<{ id: string, field: string } | null>(null)
@@ -80,7 +78,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
   useEffect(() => { setIsMounted(true) }, [])
 
-  // Sync data Prop ke State
   useEffect(() => {
     if (project) setLocalProject(project)
   }, [project?.id, project?.category, project?.name, project?.description, project?.year]) 
@@ -103,16 +100,14 @@ export default function ProjectView({ project, tasks, links, members }: any) {
   const handleUpdateTask = async (taskId: string | string[], updates: any) => {
     const idsToUpdate = Array.isArray(taskId) ? taskId : [taskId]
     
-    // Perbarui UI seketika (Optimistic Update)
     setLocalTasks(prev => prev.map(t => idsToUpdate.includes(t.id) ? { ...t, ...updates } : t))
     setEditingCell(null)
     setActiveDropdown(null)
     
     try {
-      // Kirim perubahan ke database
       await supabase.from('tasks').update(updates).in('id', idsToUpdate)
       
-      // 🔴 FIX: TRIGGER NOTIFIKASI JIKA ADA PERUBAHAN ASSIGNEE
+      // TRIGGER NOTIFIKASI ASSIGNEE
       if (updates.assignee_id !== undefined && updates.assignee_id !== null) {
         const notifs = idsToUpdate.map(id => {
           const task = localTasks.find(t => t.id === id)
@@ -127,7 +122,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           await supabase.from('notifications').insert(notifs)
         }
       }
-
       router.refresh()
     } catch (e: any) {
       console.error(e)
@@ -165,7 +159,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
   const workspaceName = localProject?.workspaces?.name || 'Workspace'
 
-  // Logika Kalkulasi Gantt
+  // Gantt Chart Logic
   const ganttTasks = localTasks.filter(t => t.due_date);
   let minTime = new Date().getTime();
   let maxTime = new Date().getTime();
@@ -258,6 +252,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           </div>
         )}
 
+        {/* 🔴 TAB LIST DENGAN KOLOM BARU */}
         {activeTab === 'list' && (
           <div className="space-y-8 pb-32 mt-4">
             {groupedTasks
@@ -274,13 +269,14 @@ export default function ProjectView({ project, tasks, links, members }: any) {
 
                 <div className="w-full">
                   
+                  {/* 🔴 HEADER KOLOM BARU (12 Kolom) */}
                   <div className="grid grid-cols-12 gap-4 border-b border-zinc-200 py-2 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider items-center">
-                    <div className="col-span-5 pl-11">Name</div>
+                    <div className="col-span-4 pl-11">Name</div>
                     <div className="col-span-2 text-center">Assignee</div>
                     <div className="col-span-2 text-center">Due date</div>
+                    <div className="col-span-2 text-center">Completed</div>
                     <div className="col-span-1 text-center">Priority</div>
-                    <div className="col-span-1 text-center">Dokumen</div>
-                    <div className="col-span-1"></div>
+                    <div className="col-span-1 text-right pr-6">Doc</div>
                   </div>
 
                   {group.data.map((task: any) => {
@@ -302,9 +298,10 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                     }
 
                     return (
-                      <div key={task.id} className={`relative grid grid-cols-12 gap-4 items-center border-b border-zinc-100 py-1.5 transition-colors group/row ${isSelected ? 'bg-indigo-50/60' : 'hover:bg-zinc-50'}`} style={{ zIndex: isEditing || isDropdownOpen ? 50 : 1 }}>
+                      <div key={task.id} className={`relative grid grid-cols-12 gap-4 items-center border-b border-zinc-100 py-2 transition-colors group/row ${isSelected ? 'bg-indigo-50/60' : 'hover:bg-zinc-50'}`} style={{ zIndex: isEditing || isDropdownOpen ? 50 : 1 }}>
                         
-                        <div className="col-span-5 pl-3 flex items-center gap-2 text-sm font-medium text-zinc-800 h-full">
+                        {/* 1. NAME (Span 4) */}
+                        <div className="col-span-4 pl-3 flex items-center gap-2 text-sm font-medium text-zinc-800 h-full">
                           <div className="w-6 flex justify-center shrink-0">
                             <input type="checkbox" checked={isSelected} onChange={() => toggleTaskSelection(task.id)} className={`w-4 h-4 cursor-pointer accent-indigo-600 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}`} />
                           </div>
@@ -347,6 +344,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                           )}
                         </div>
                         
+                        {/* 2. ASSIGNEE (Span 2) */}
                         <div className="col-span-2 flex items-center justify-center relative h-full">
                           <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'assignee' }); }} className="cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full max-w-[120px] h-full">
                             {task.assignee_id ? (
@@ -355,7 +353,6 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                                   const assignee = members?.find((m: any) => m.user_id === task.assignee_id);
                                   const assigneeName = assignee?.full_name || 'User';
                                   const avatarUrl = assignee?.avatar_url;
-                                  
                                   return (
                                     <>
                                       {avatarUrl ? (
@@ -394,6 +391,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                           )}
                         </div>
                         
+                        {/* 3. DUE DATE (Span 2) */}
                         <div className="col-span-2 flex items-center justify-center relative h-full">
                           {isEditing && editingCell?.field === 'dueDate' ? (
                             <input 
@@ -409,13 +407,59 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                           )}
                         </div>
 
+                        {/* 🔴 4. COMPLETED DATE & SLA BADGE (Span 2) */}
+                        <div className="col-span-2 flex items-center justify-center relative h-full">
+                          {isEditing && editingCell?.field === 'completedAt' ? (
+                            <input 
+                              type="date" autoFocus className="absolute z-50 border border-indigo-400 rounded shadow-lg bg-white px-2 py-1 text-xs outline-none"
+                              defaultValue={task.completed_at ? task.completed_at.split('T')[0] : ''}
+                              onChange={(e) => { 
+                                e.stopPropagation(); 
+                                let dateVal = e.target.value;
+                                if (dateVal) {
+                                  const dt = new Date(dateVal);
+                                  dt.setHours(23, 59, 59); // Set ke penghujung hari
+                                  dateVal = dt.toISOString();
+                                } else {
+                                  dateVal = null as any;
+                                }
+                                handleUpdateTask(task.id, { completed_at: dateVal }); 
+                              }}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          ) : (
+                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'completedAt' }); }} className={`cursor-pointer px-2 py-1 rounded hover:bg-zinc-200/50 transition-colors text-xs text-center w-full max-w-[120px] h-full flex flex-col items-center justify-center`}>
+                              {task.status === 'Completed' ? (
+                                <>
+                                  <span className="text-zinc-700 font-medium leading-none">{formatClickUpDate(task.completed_at) || '-'}</span>
+                                  <div className="mt-1">
+                                    {(() => {
+                                      if (!task.completed_at) return <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">No Date</span>
+                                      if (!task.due_date) return <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Done</span>
+                                      
+                                      const due = new Date(task.due_date); due.setHours(23, 59, 59, 999);
+                                      const done = new Date(task.completed_at);
+                                      
+                                      if (done.getTime() <= due.getTime()) return <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">On Time</span>
+                                      return <span className="text-[9px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Overdue</span>
+                                    })()}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-zinc-300">-</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 5. PRIORITY (Span 1) */}
                         <div className="col-span-1 flex items-center justify-center relative h-full">
                           <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'priority' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
-                            {/* Memperbaiki Type Error SVG title dengan memberikan elemen span sebagai wrapper title jika diperlukan, atau menghapusnya jika tdk penting */}
-                            <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors ${task.status === 'Completed' ? 'opacity-40 grayscale' : ''}`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
-                              <title>Priority: {task.priority || 'Normal'}</title>
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
-                            </svg>
+                            <span title={`Priority: ${task.priority || 'Normal'}`}>
+                              <svg className={`w-4 h-4 ${task.priority === 'High' ? 'text-amber-500' : task.priority === 'Urgent' ? 'text-red-500' : 'text-zinc-300'} hover:opacity-75 transition-colors ${task.status === 'Completed' ? 'opacity-40 grayscale' : ''}`} fill={task.priority === 'High' || task.priority === 'Urgent' ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                              </svg>
+                            </span>
                           </div>
 
                           {isEditing && editingCell?.field === 'priority' && (
@@ -430,47 +474,44 @@ export default function ProjectView({ project, tasks, links, members }: any) {
                           )}
                         </div>
 
-                        <div className="col-span-1 flex items-center justify-center relative h-full">
+                        {/* 🔴 6. DOKUMEN & AKSI DIGABUNG (Span 1) */}
+                        <div className="col-span-1 flex items-center justify-end pr-2 relative h-full gap-1">
+                          
+                          {/* DOKUMEN */}
                           {task.document_url ? (
                             <div className="flex items-center gap-1.5 group/doc h-full justify-center">
                               <a href={task.document_url} target="_blank" rel="noreferrer" className={`p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center ${task.status === 'Completed' ? 'opacity-50 grayscale' : ''}`} title="Buka Dokumen">
                                 <DocumentIcon url={task.document_url} className="w-4 h-4" />
                               </a>
-                              <button onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="text-zinc-400 hover:text-zinc-700 opacity-0 group-hover/doc:opacity-100 flex items-center justify-center p-1 rounded hover:bg-zinc-200/50" title="Edit Link">
+                              <button onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="text-zinc-400 hover:text-zinc-700 opacity-0 group-hover/doc:opacity-100 flex items-center justify-center p-1 rounded hover:bg-zinc-200/50 absolute right-6 bg-white shadow-sm border border-zinc-200" title="Edit Link">
                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                               </button>
                             </div>
                           ) : (
-                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-full h-full">
+                            <div onClick={(e) => { e.stopPropagation(); setEditingCell({ id: task.id, field: 'document' }); }} className="cursor-pointer p-1 rounded hover:bg-zinc-200/50 transition-colors flex items-center justify-center w-6 h-6">
                               <DocumentIcon url="" className="w-4 h-4 text-zinc-300 hover:text-zinc-500" />
                             </div>
                           )}
 
                           {isEditing && editingCell?.field === 'document' && (
                             <form 
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                const val = new FormData(e.currentTarget).get('docUrl') as string;
-                                handleUpdateTask(task.id, { document_url: val || null });
-                              }}
-                              className="absolute top-full right-0 mt-1 w-64 bg-white border border-zinc-200 shadow-xl rounded-lg p-2 flex gap-2 z-50 animate-in zoom-in-95 duration-100" 
-                              onClick={e => e.stopPropagation()}
+                              onSubmit={(e) => { e.preventDefault(); const val = new FormData(e.currentTarget).get('docUrl') as string; handleUpdateTask(task.id, { document_url: val || null }); }}
+                              className="absolute top-full right-0 mt-1 w-64 bg-white border border-zinc-200 shadow-xl rounded-lg p-2 flex gap-2 z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}
                             >
                               <input name="docUrl" type="url" placeholder="Paste Link URL..." autoFocus defaultValue={task.document_url || ''} className="flex-1 text-xs border border-zinc-200 rounded px-2 py-1.5 outline-none focus:border-indigo-500" />
                               <button type="submit" className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded transition-colors">Save</button>
                             </form>
                           )}
-                        </div>
-                        
-                        <div className="col-span-1 flex items-center justify-end pr-4 relative h-full">
+                          
+                          {/* TOMBOL AKSI (...) */}
                           <button 
                             onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : { id: task.id, type: 'row' }); }}
-                            className={`text-zinc-400 hover:text-zinc-800 p-1.5 rounded-md transition-all flex items-center justify-center ${isDropdownOpen ? 'opacity-100 bg-zinc-200' : 'opacity-0 group-hover/row:opacity-100 hover:bg-zinc-200'}`}
+                            className={`text-zinc-400 hover:text-zinc-800 p-1 rounded transition-all flex items-center justify-center ${isDropdownOpen ? 'opacity-100 bg-zinc-200' : 'opacity-0 group-hover/row:opacity-100 hover:bg-zinc-200'}`}
                           >
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5 12a2 2 0 11-4 0 2 2 0 014 0zM14 12a2 2 0 11-4 0 2 2 0 014 0zM23 12a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                           </button>
                           {isDropdownOpen && (
-                            <div className="absolute top-full right-4 mt-1 w-32 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
+                            <div className="absolute top-full right-0 mt-1 w-32 bg-white border border-zinc-200 shadow-xl rounded-lg py-1 flex flex-col z-50 animate-in zoom-in-95 duration-100" onClick={e => e.stopPropagation()}>
                               <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">Delete Task</button>
                             </div>
                           )}
@@ -492,6 +533,7 @@ export default function ProjectView({ project, tasks, links, members }: any) {
           </div>
         )}
 
+        {/* ... (TAB BOARD & GANTT & BOTTOM BAR TETAP SAMA SEPERTI KODE SEBELUMNYA) ... */}
         {activeTab === 'board' && (
           <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-zinc-200 rounded-xl bg-zinc-50 mt-4">
             <svg className="w-10 h-10 text-zinc-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>

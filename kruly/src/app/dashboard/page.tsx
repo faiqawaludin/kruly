@@ -96,8 +96,8 @@ export default async function DashboardPage({
       {/* HEADER & FILTER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-200">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Dashboard MoM GMC</h1>
-          <p className="text-sm text-zinc-500 mt-1">Global Overview Performa Task</p>
+          <h1 className="text-4xl font-black tracking-tight text-zinc-900">Dashboard</h1>
+          <p className="text-sm text-zinc-500 mt-1">Overview Performance</p>
         </div>
         <div className="flex items-center gap-4">
           <DashboardFilters isAdmin={isAdmin} userId={user?.id as string} />
@@ -108,7 +108,7 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Panel 1 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
-          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Seluruh Task</h3>
+          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Task</h3>
           <div className="flex justify-between items-end">
             <span className="text-5xl font-black text-zinc-900 leading-none">{totalTask}</span>
             <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-[10px] font-bold text-zinc-500 uppercase w-28">
@@ -121,7 +121,7 @@ export default async function DashboardPage({
 
         {/* Panel 2 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
-          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Task Aktif</h3>
+          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Active Task</h3>
           <div className="flex justify-between items-end">
             <span className="text-5xl font-black text-blue-600 leading-none">{totalActive}</span>
             <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-[10px] font-bold text-zinc-500 uppercase w-28">
@@ -134,7 +134,7 @@ export default async function DashboardPage({
 
         {/* Panel 3 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
-          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Selesai</h3>
+          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Total Tasks Completed</h3>
           <div className="flex justify-between items-end">
             <span className="text-5xl font-black text-emerald-600 leading-none">{completed}</span>
             <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-[10px] font-bold text-zinc-500 uppercase w-24">
@@ -146,14 +146,14 @@ export default async function DashboardPage({
 
         {/* Panel 4 */}
         <div className="border border-zinc-300 rounded-xl bg-white p-4 shadow-sm flex flex-col justify-between">
-          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Avg. Lead Time</h3>
+          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Average Lead Time</h3>
           <div className="flex justify-between items-end">
             <div className="flex items-baseline gap-1">
               <span className="text-5xl font-black text-amber-500 leading-none">{avgLeadTime}</span>
-              <span className="text-sm font-bold text-zinc-400 mb-1">Hari</span>
+              <span className="text-sm font-bold text-zinc-400 mb-1">Days</span>
             </div>
             <div className="text-[10px] font-bold text-zinc-500 uppercase text-right leading-tight mb-1">
-              Rata-rata<br/>Penyelesaian
+              Average <br/>Completion Time
             </div>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default async function DashboardPage({
         
         {/* Line Chart */}
         <div className="col-span-1 lg:col-span-8 border border-zinc-300 rounded-xl bg-white p-4 shadow-sm min-h-[300px] flex flex-col">
-          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Tren & Aktivitas Bulanan</h3>
+          <h3 className="text-xs font-bold text-zinc-800 uppercase tracking-wider mb-4">Monthly Trends & Activities</h3>
           <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm border-2 border-dashed border-zinc-200 rounded-md bg-zinc-50/50">
             (Placeholder Line Chart Recharts)
           </div>
@@ -182,7 +182,7 @@ export default async function DashboardPage({
 
       {/* --- BARIS 3: DAFTAR SPACE --- */}
       <div className="pt-6 mt-4">
-        <h2 className="text-lg font-bold text-zinc-800 mb-4">Daftar Space (Workspace)</h2>
+        <h2 className="text-lg font-bold text-zinc-800 mb-4">WORKSPACE</h2>
         <SpaceCardList workspaces={workspaces || []} />
       </div>
       
