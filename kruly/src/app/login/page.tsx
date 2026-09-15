@@ -18,31 +18,45 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN, RECOVERY (LUPA PASSWORD), & PEMBERSIH URL
+  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN, RECOVERY, & ERROR HANDLING
+  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN & RECOVERY (ANTI-RACE CONDITION)
   useEffect(() => {
-    const checkInviteLink = async () => {
-      const hash = window.location.hash
-      
-      if (hash && hash.includes("access_token")) {
-        
-        // 🧹 SAPU BERSIH TOKEN DARI URL SECARA INSTAN!
-        window.history.replaceState(null, '', window.location.pathname)
+    const hash = window.location.hash
+    
+    // 1. Tangkap error kalau link kedaluwarsa
+    if (hash && hash.includes("error_code=otp_expired")) {
+      window.history.replaceState(null, '', window.location.pathname)
+      setErrorMsg("Link undangan/reset password sudah kedaluwarsa atau pernah dipakai. Silakan minta link baru.")
+      return
+    }
 
-        // Beri sedikit waktu agar Supabase selesai mengeset sesi di background
-        const { data: { session } } = await supabase.auth.getSession()
+    // 2. Tangkap token sukses (Invite / Recovery)
+    if (hash && hash.includes("access_token")) {
+      
+      // JANGAN hapus URL dulu! Biarkan Supabase bekerja memproses token.
+      // Kita gunakan 'onAuthStateChange' untuk mendengarkan aba-aba dari Supabase.
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
         
-        if (session) {
-           // Tangkap link "invite" (akun baru) maupun link "recovery" (reset password)
-           if (hash.includes("type=invite") || hash.includes("type=recovery")) {
-             router.push("/set-password")
-           } else {
-             router.push("/dashboard")
-           }
+        // Jika Supabase sudah berteriak "SIGNED_IN" atau "PASSWORD_RECOVERY"...
+        if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
+          
+          // SEKARANG baru aman untuk menyapu bersih URL! 🧹
+          window.history.replaceState(null, '', window.location.pathname)
+          
+          // Arahkan user ke halaman yang tepat
+          if (hash.includes("type=invite") || hash.includes("type=recovery")) {
+            router.push("/set-password")
+          } else {
+            router.push("/dashboard")
+          }
         }
+      })
+
+      // Bersihkan listener jika komponen ditutup
+      return () => {
+        authListener.subscription.unsubscribe()
       }
     }
-    
-    checkInviteLink()
   }, [router, supabase])
 
   const handleLogin = async (e: React.FormEvent) => {
