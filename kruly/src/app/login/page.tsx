@@ -18,7 +18,7 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN & MAGIC LINK
+  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN & RECOVERY (LUPA PASSWORD)
   useEffect(() => {
     const checkInviteLink = async () => {
       const hash = window.location.hash
@@ -28,7 +28,8 @@ export default function LoginPage() {
         const { data: { session } } = await supabase.auth.getSession()
         
         if (session) {
-           if (hash.includes("type=invite")) {
+           // Tangkap link "invite" maupun link "recovery" (reset password)
+           if (hash.includes("type=invite") || hash.includes("type=recovery")) {
              router.push("/set-password")
            } else {
              router.push("/dashboard")
@@ -43,7 +44,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    setErrorMsg("") // 🔴 FIX 2: Kosongkan pesan error di awal, jangan hardcode "Error"
+    setErrorMsg("") 
     setSuccessMsg("")
     
     if (!email || !password) {
@@ -91,6 +92,30 @@ export default function LoginPage() {
     setLoading(false)
   }
 
+  // 🔴 FIX 2: FUNGSI RESET PASSWORD
+  const handleResetPassword = async () => {
+    if (!email) {
+      setErrorMsg("Please enter your email address first to reset your password.")
+      return
+    }
+    
+    setLoading(true)
+    setErrorMsg("")
+    setSuccessMsg("")
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // Supabase akan melempar kembali ke halaman ini dengan hash type=recovery
+      redirectTo: `${window.location.origin}/login`, 
+    })
+
+    if (error) {
+      setErrorMsg(error.message)
+    } else {
+      setSuccessMsg("Password reset link sent! Please check your email.")
+    }
+    setLoading(false)
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 p-4">
       <Card className="w-full max-w-sm">
@@ -115,7 +140,18 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              {/* 🔴 FIX 3: TOMBOL FORGOT PASSWORD DI SEBELAH LABEL */}
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button 
+                  type="button" 
+                  onClick={handleResetPassword}
+                  disabled={loading}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors disabled:opacity-50"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <Input 
                 id="password" 
                 type="password"
