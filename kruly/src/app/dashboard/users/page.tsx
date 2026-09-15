@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
-import { deleteUserAccountMFA } from "@/app/actions/userActions"
-import InviteUserModal from "./InviteUserModal" // 🔴 IMPORT KOMPONEN INVITE
+import { deleteUserAccountMFA, getAdminUsersList } from "@/app/actions/userActions" // 🔴 IMPORT FUNGSI BARU
+import InviteUserModal from "./InviteUserModal"
 
 const formatLogTime = (dateString: string) => {
   const date = new Date(dateString)
@@ -18,6 +18,9 @@ export default function UsersManagementPage() {
   const [projectMembers, setProjectMembers] = useState<any[]>([])
   const [auditLogs, setAuditLogs] = useState<any[]>([])
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null)
+
+  // 🔴 STATE UNTUK USER YANG SEDANG ONLINE
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -52,11 +55,13 @@ export default function UsersManagementPage() {
       setCurrentUserProfile(currProfile)
     }
 
+    // 🔴 KITA GUNAKAN FUNGSI SERVER ACTION YANG BARU DIBUAT
+    const adminUsersResponse = await getAdminUsersList()
+
     const [
-      { data: profiles }, { data: workspaces }, { data: projects },
+      { data: workspaces }, { data: projects },
       { data: wMembers }, { data: pMembers }, { data: logs }
     ] = await Promise.all([
-      supabase.from('profiles').select('*').order('full_name', { ascending: true }),
       supabase.from('workspaces').select('*'),
       supabase.from('projects').select('*'),
       supabase.from('workspace_members').select('*'),
@@ -64,7 +69,16 @@ export default function UsersManagementPage() {
       supabase.from('audit_logs').select('*').order('created_at', { ascending: false })
     ])
 
-    if (profiles) setUsers(profiles)
+    if (adminUsersResponse.success) {
+      // Sort: User dengan nama di atas, pending di bawah
+      const sortedUsers = adminUsersResponse.data.sort((a: any, b: any) => {
+        if (a.isPending && !b.isPending) return 1
+        if (!a.isPending && b.isPending) return -1
+        return (a.full_name || '').localeCompare(b.full_name || '')
+      })
+      setUsers(sortedUsers)
+    }
+    
     if (workspaces) setAllWorkspaces(workspaces)
     if (projects) setAllProjects(projects)
     if (wMembers) setWorkspaceMembers(wMembers)
@@ -74,7 +88,47 @@ export default function UsersManagementPage() {
     setIsLoading(false)
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { 
+    fetchData() 
+    
+    // Inisialisasi channel presence
+    const room = supabase.channel('online-users', {
+      config: {
+        presence: {
+          key: '', // Akan di-override saat track()
+        },
+      },
+    })
+
+    const setupPresence = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Dengarkan perubahan state presence
+      room.on('presence', { event: 'sync' }, () => {
+        const newState = room.presenceState()
+        // Ambil semua key (user_id) yang sedang aktif
+        const activeIds = Object.keys(newState)
+        setOnlineUsers(new Set(activeIds))
+      })
+
+      // Subscribe ke channel dan umumkan kehadiran (track)
+      room.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // Track diri sendiri dengan ID user sebagai key
+          await room.track({ online_at: new Date().toISOString() })
+        }
+      })
+    }
+
+    setupPresence()
+
+    return () => { 
+      // Bersihkan channel saat komponen di-unmount
+      room.unsubscribe() 
+      supabase.removeChannel(room) 
+    }
+  }, [])
 
   const getWorkspaceCount = (userId: string) => workspaceMembers.filter(wm => wm.user_id === userId).length
 
@@ -105,7 +159,7 @@ export default function UsersManagementPage() {
     setIsSaving(true)
     try {
       if (tempGlobalRole !== initialGlobalRole) {
-        await supabase.from('audit_logs').insert({ action: 'Update Role', executor_id: currentUserProfile?.id, executor_name: currentUserProfile?.full_name, target_user_id: selectedUser.id, target_user_name: selectedUser.full_name, details: `Changed role from '${initialGlobalRole}' to '${tempGlobalRole}'` })
+        await supabase.from('audit_logs').insert({ action: 'Update Role', executor_id: currentUserProfile?.id, executor_name: currentUserProfile?.full_name, target_user_id: selectedUser.id, target_user_name: selectedUser.full_name || selectedUser.email, details: `Changed role from '${initialGlobalRole}' to '${tempGlobalRole}'` })
       }
       await supabase.from('profiles').update({ global_role: tempGlobalRole }).eq('id', selectedUser.id)
       await supabase.from('workspace_members').delete().eq('user_id', selectedUser.id)
@@ -118,8 +172,8 @@ export default function UsersManagementPage() {
         const newPrjMembers = Array.from(tempProjects).map(id => ({ user_id: selectedUser.id, project_id: id, role: 'member' }))
         await supabase.from('project_members').insert(newPrjMembers)
       }
-      await supabase.from('audit_logs').insert({ action: 'Update Access', executor_id: currentUserProfile?.id, executor_name: currentUserProfile?.full_name, target_user_id: selectedUser.id, target_user_name: selectedUser.full_name, details: `Granted access to ${tempWorkspaces.size} workspaces & ${tempProjects.size} projects.` })
-      await fetchData(); closeModal(); showToast(`Access updated for ${selectedUser.full_name}`, 'success')
+      await supabase.from('audit_logs').insert({ action: 'Update Access', executor_id: currentUserProfile?.id, executor_name: currentUserProfile?.full_name, target_user_id: selectedUser.id, target_user_name: selectedUser.full_name || selectedUser.email, details: `Granted access to ${tempWorkspaces.size} workspaces & ${tempProjects.size} projects.` })
+      await fetchData(); closeModal(); showToast(`Access updated for ${selectedUser.full_name || 'User'}`, 'success')
     } catch (error: any) { showToast("Error: " + error.message, 'error') } finally { setIsSaving(false) }
   }
 
@@ -127,24 +181,24 @@ export default function UsersManagementPage() {
     setMfaState('checking')
     setMfaCode('')
 
-    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    // Kita langsung cek faktor authenticator yang terdaftar
+    const { data: factors } = await supabase.auth.mfa.listFactors()
     
-    if (aalData?.currentLevel === 'aal2') {
-      setMfaState('verified')
-    } else if (aalData?.nextLevel === 'aal2') {
-      const { data: factors } = await supabase.auth.mfa.listFactors()
-      if (factors?.totp?.[0]) {
-        setMfaFactorId(factors.totp[0].id)
-        setMfaState('verify')
-      }
+    // Cek apakah user sudah punya TOTP factor yang aktif
+    if (factors?.totp && factors.totp.length > 0 && factors.totp[0].status === 'verified') {
+      // Selalu minta kode jika sudah pernah setup
+      setMfaFactorId(factors.totp[0].id)
+      setMfaState('verify')
     } else {
+      // Jika belum pernah setup sama sekali, mulai proses pendaftaran (enrollment)
       const { data: enrollData, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
       if (!error && enrollData) {
         setMfaFactorId(enrollData.id)
         setQrCodeSvg(enrollData.totp.qr_code) 
         setMfaState('setup')
       } else {
-        showToast("Failed to initialize 2FA system", 'error'); setMfaState('idle')
+        showToast("Failed to initialize 2FA system", 'error')
+        setMfaState('idle')
       }
     }
   }
@@ -152,19 +206,27 @@ export default function UsersManagementPage() {
   const verifyMfaAndExecute = async () => {
     setIsDeleting(true)
     try {
-      if (mfaState !== 'verified') {
-        const { data: challengeData } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
-        const verifyRes = await supabase.auth.mfa.verify({
-          factorId: mfaFactorId, challengeId: challengeData!.id, code: mfaCode
-        })
-        if (verifyRes.error) throw new Error("Invalid Authenticator Code!")
-      }
+      // Buat challenge baru setiap kali akan mengeksekusi
+      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
+      
+      if (challengeError) throw new Error("Gagal memulai verifikasi keamanan.")
 
+      // Verifikasi kode yang dimasukkan user terhadap challenge yang baru dibuat
+      const verifyRes = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId, 
+        challengeId: challengeData!.id, 
+        code: mfaCode
+      })
+      
+      if (verifyRes.error) throw new Error("Kode Authenticator tidak valid!")
+
+      // Jika kode benar, lanjutkan penghapusan
       const result = await deleteUserAccountMFA(selectedUser.id)
       
       if (result.success) {
-        showToast(`User ${selectedUser.full_name} successfully deleted.`, 'success')
-        closeModal(); fetchData()
+        showToast(`User ${selectedUser.full_name || selectedUser.email} berhasil dihapus.`, 'success')
+        closeModal()
+        fetchData()
       } else {
         throw new Error(result.message)
       }
@@ -199,8 +261,6 @@ export default function UsersManagementPage() {
 
       {/* HEADER & TABS */}
       <div className="border-b border-zinc-200 pb-2 mb-8 relative z-10 -mx-6 px-6 -mt-6 pt-6 bg-white">
-        
-        {/* 🔴 HEADER YANG SUDAH DITAMBAH TOMBOL INVITE USER */}
         <div className="flex justify-between items-start mb-6">
           <div>
             <h1 className="text-3xl font-black text-zinc-900 tracking-tight">User Management</h1>
@@ -224,34 +284,109 @@ export default function UsersManagementPage() {
         {/* --- TAB 1: USERS --- */}
         {activeTab === 'users' && (
           <div className="animate-in fade-in duration-300">
+            {/* 🔴 HEADER TABEL DIUBAH AGAR ADA STATUS */}
             <div className="grid grid-cols-12 gap-4 border-b border-zinc-200 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-              <div className="col-span-4 pl-2">Name</div><div className="col-span-3">Role</div><div className="col-span-3">Access</div><div className="col-span-2 text-right pr-2">Action</div>
+              <div className="col-span-3 pl-2">User</div>
+              <div className="col-span-2 text-center">Status</div>
+              <div className="col-span-2 text-center">Role</div>
+              <div className="col-span-3 text-center">Access</div>
+              <div className="col-span-2 text-right pr-2">Action</div>
             </div>
 
             <div className="flex flex-col">
-              {users.map((user) => (
-                <div key={user.id} className="grid grid-cols-12 gap-4 py-3.5 items-center border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors">
-                  <div className="col-span-4 pl-2 flex flex-col min-w-0">
-                    <span className="text-sm font-semibold text-zinc-800 truncate">{user.full_name || 'Unnamed'}</span>
-                    <span className="text-[10px] text-zinc-400 font-mono mt-0.5">{user.id.substring(0, 8)}</span>
+              {users.map((user) => {
+                const isOnline = onlineUsers.has(user.id);
+                
+                return (
+                  <div key={user.id} className="grid grid-cols-12 gap-4 py-3.5 items-center border-b border-zinc-100 hover:bg-zinc-50/50 transition-colors">
+                    
+                    {/* KOLOM NAMA & EMAIL */}
+                    <div className="col-span-3 pl-2 flex items-center gap-3 min-w-0">
+                      <div className="relative shrink-0">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} className="w-8 h-8 rounded-full object-cover border border-zinc-200" alt="Avatar" />
+                        ) : (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border ${user.isPending ? 'bg-zinc-100 text-zinc-400 border-zinc-200 border-dashed' : 'bg-indigo-100 text-indigo-700 border-indigo-200'}`}>
+                            {(user.full_name || user.email || 'U').substring(0,2).toUpperCase()}
+                          </div>
+                        )}
+                        {/* Dot Online Indicator di Avatar */}
+                        {isOnline && !user.isPending && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full z-10 shadow-sm"></div>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col min-w-0">
+                        <span className={`text-sm font-semibold truncate ${user.isPending ? 'text-zinc-500 italic' : 'text-zinc-800'}`}>
+                          {user.full_name || 'Menunggu Register...'}
+                        </span>
+                        
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-zinc-500 truncate">{user.email}</span>
+                          
+                          {/* 🔴 IKON VERIFIED (Muncul jika user SUDAH tidak pending) */}
+                          {!user.isPending && (
+                            <div title="Verified Account" className="text-indigo-500 shrink-0">
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 🔴 KOLOM STATUS BARU */}
+                    <div className="col-span-2 flex justify-center">
+                      {user.isPending ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold uppercase tracking-wider">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          Pending
+                        </span>
+                      ) : isOnline ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase tracking-wider">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                          Online
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-100 text-zinc-600 border border-zinc-200 text-[10px] font-bold uppercase tracking-wider">
+                          <div className="w-1.5 h-1.5 rounded-full bg-zinc-400"></div>
+                          Offline
+                        </span>
+                      )}
+                    </div>
+
+                    {/* KOLOM ROLE */}
+                    <div className="col-span-2 flex justify-center">
+                      {!user.isPending && (
+                        <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider ${user.global_role === 'super_admin' ? 'text-amber-600' : user.global_role === 'admin' ? 'text-indigo-600' : 'text-zinc-500'}`}>
+                          {user.global_role || 'member'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* KOLOM ACCESS */}
+                    <div className="col-span-3 text-xs text-zinc-500 flex justify-center">
+                      {!user.isPending && (
+                        <span><span className="font-semibold text-zinc-700">{getWorkspaceCount(user.id)}</span> Workspaces</span>
+                      )}
+                    </div>
+                    
+                    {/* KOLOM ACTION */}
+                    <div className="col-span-2 flex justify-end pr-2">
+                      <button onClick={() => openModal(user)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-wide">
+                        Manage
+                      </button>
+                    </div>
+
                   </div>
-                  <div className="col-span-3">
-                    <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider ${user.global_role === 'super_admin' ? 'text-amber-600' : user.global_role === 'admin' ? 'text-indigo-600' : 'text-zinc-500'}`}>{user.global_role || 'member'}</span>
-                  </div>
-                  <div className="col-span-3 text-xs text-zinc-500"><span className="font-semibold text-zinc-700">{getWorkspaceCount(user.id)}</span> Workspaces</div>
-                  
-                  <div className="col-span-2 flex justify-end pr-2">
-                    <button onClick={() => openModal(user)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-wide">
-                      Manage
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* --- TAB 2: LOGS --- */}
+        {/* --- TAB 2: LOGS --- (Tidak ada perubahan) */}
         {activeTab === 'logs' && isAdminOrSuperAdmin && (
           <div className="animate-in fade-in duration-300">
              <div className="grid grid-cols-12 gap-4 border-b border-zinc-200 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
@@ -281,7 +416,7 @@ export default function UsersManagementPage() {
             
             <div className="px-6 py-4 border-b border-zinc-100 flex justify-between items-center">
               <h3 className="font-bold text-lg text-zinc-900">
-                {mfaState === 'idle' ? `Manage Access: ${selectedUser.full_name}` : 'Security Check'}
+                {mfaState === 'idle' ? `Manage Access: ${selectedUser.full_name || selectedUser.email}` : 'Security Check'}
               </h3>
               <button onClick={closeModal} className="text-zinc-400 hover:text-zinc-700 p-1">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -292,72 +427,85 @@ export default function UsersManagementPage() {
               
               {mfaState === 'idle' && (
                 <div className="space-y-7 animate-in fade-in duration-300">
-                  <div>
-                    <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">Global System Role</label>
-                    {selectedUser.global_role === 'super_admin' ? (
-                      <div className="w-full h-11 border border-amber-200 bg-amber-50 rounded-xl px-4 flex items-center text-sm text-amber-700 cursor-not-allowed">
-                        <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" clipRule="evenodd" /></svg>
-                        <span className="font-bold mr-1">Super Admin</span> (Database change required)
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <button type="button" onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)} className={`w-full h-11 border bg-white rounded-xl px-4 flex items-center justify-between text-sm transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/10 ${isRoleDropdownOpen ? 'border-indigo-500 shadow-sm' : 'border-zinc-200 hover:border-zinc-300'}`}>
-                          <span className="font-semibold text-zinc-900">{roleOptions.find(r => r.id === tempGlobalRole)?.name || 'Select Role...'}</span>
-                          <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isRoleDropdownOpen ? 'rotate-180 text-indigo-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
-                        </button>
+                  {/* JIKA USER MASIH PENDING, SEMBUNYIKAN PENGATURAN AKSES */}
+                  {selectedUser.isPending ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center">
+                      <svg className="w-8 h-8 text-amber-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <h4 className="font-bold text-amber-800 text-sm mb-1">User Belum Mengatur Password</h4>
+                      <p className="text-xs text-amber-700/80 mb-4">Kamu tidak bisa mengatur role atau workspace untuk user yang belum menyelesaikan registrasi. Jika dirasa ada kesalahan email, kamu bisa menghapus user ini dan mengundangnya kembali.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* ROLE & WORKSPACE ACCESS TETAP SAMA */}
+                      <div>
+                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">Global System Role</label>
+                        {selectedUser.global_role === 'super_admin' ? (
+                          <div className="w-full h-11 border border-amber-200 bg-amber-50 rounded-xl px-4 flex items-center text-sm text-amber-700 cursor-not-allowed">
+                            <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" clipRule="evenodd" /></svg>
+                            <span className="font-bold mr-1">Super Admin</span> (Database change required)
+                          </div>
+                        ) : (
+                          <div className="relative">
+                            <button type="button" onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)} className={`w-full h-11 border bg-white rounded-xl px-4 flex items-center justify-between text-sm transition-all focus:outline-none focus:ring-4 focus:ring-indigo-500/10 ${isRoleDropdownOpen ? 'border-indigo-500 shadow-sm' : 'border-zinc-200 hover:border-zinc-300'}`}>
+                              <span className="font-semibold text-zinc-900">{roleOptions.find(r => r.id === tempGlobalRole)?.name || 'Select Role...'}</span>
+                              <svg className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isRoleDropdownOpen ? 'rotate-180 text-indigo-500' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                            </button>
 
-                        {isRoleDropdownOpen && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setIsRoleDropdownOpen(false)}></div>
-                            <div className="absolute z-50 w-full mt-2 bg-white border border-zinc-100 rounded-xl shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 py-1">
-                              {roleOptions.map((role) => (
-                                <button key={role.id} type="button" onClick={() => { setTempGlobalRole(role.id); setIsRoleDropdownOpen(false) }} className={`w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors flex flex-col ${tempGlobalRole === role.id ? 'bg-indigo-50/50' : ''}`}>
-                                  <div className="flex items-center justify-between">
-                                    <span className={`text-sm font-semibold ${tempGlobalRole === role.id ? 'text-indigo-700' : 'text-zinc-800'}`}>{role.name}</span>
-                                    {tempGlobalRole === role.id && <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                                  </div>
-                                  <span className="text-[11px] text-zinc-500 mt-0.5">{role.desc}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-3">Workspace & Project Access</label>
-                    {allWorkspaces.length === 0 ? <p className="text-sm text-zinc-500 italic">No workspaces available.</p> : (
-                      <div className="space-y-4">
-                        {allWorkspaces.map(wk => {
-                          const projectsInWk = allProjects.filter(p => p.workspace_id === wk.id)
-                          const isWkChecked = tempWorkspaces.has(wk.id)
-                          return (
-                            <div key={wk.id} className="border border-zinc-100 rounded-xl p-4 bg-zinc-50/50 transition-colors">
-                              <label className="flex items-center gap-3 cursor-pointer">
-                                <input type="checkbox" checked={isWkChecked} onChange={() => toggleWorkspace(wk.id)} className="w-4 h-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                                <span className="font-semibold text-zinc-800 text-sm">{wk.name}</span>
-                              </label>
-                              {projectsInWk.length > 0 && (
-                                <div className="mt-3 ml-7 space-y-2.5 border-l-2 border-zinc-200 pl-4 py-0.5">
-                                  {projectsInWk.map(prj => (
-                                    <label key={prj.id} className="flex items-center gap-2.5 cursor-pointer group">
-                                      <input type="checkbox" checked={tempProjects.has(prj.id)} onChange={() => toggleProject(prj.id)} className="w-3.5 h-3.5 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 cursor-pointer" />
-                                      <span className="text-sm text-zinc-600 group-hover:text-zinc-800 transition-colors">{prj.name} <span className="text-[10px] text-zinc-400 font-medium px-1.5 py-0.5 bg-white border border-zinc-100 rounded ml-1.5">{prj.category}</span></span>
-                                    </label>
+                            {isRoleDropdownOpen && (
+                              <>
+                                <div className="fixed inset-0 z-40" onClick={() => setIsRoleDropdownOpen(false)}></div>
+                                <div className="absolute z-50 w-full mt-2 bg-white border border-zinc-100 rounded-xl shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 py-1">
+                                  {roleOptions.map((role) => (
+                                    <button key={role.id} type="button" onClick={() => { setTempGlobalRole(role.id); setIsRoleDropdownOpen(false) }} className={`w-full text-left px-4 py-2.5 hover:bg-zinc-50 transition-colors flex flex-col ${tempGlobalRole === role.id ? 'bg-indigo-50/50' : ''}`}>
+                                      <div className="flex items-center justify-between">
+                                        <span className={`text-sm font-semibold ${tempGlobalRole === role.id ? 'text-indigo-700' : 'text-zinc-800'}`}>{role.name}</span>
+                                        {tempGlobalRole === role.id && <svg className="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                      </div>
+                                      <span className="text-[11px] text-zinc-500 mt-0.5">{role.desc}</span>
+                                    </button>
                                   ))}
                                 </div>
-                              )}
-                            </div>
-                          )
-                        })}
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-3">Workspace & Project Access</label>
+                        {allWorkspaces.length === 0 ? <p className="text-sm text-zinc-500 italic">No workspaces available.</p> : (
+                          <div className="space-y-4">
+                            {allWorkspaces.map(wk => {
+                              const projectsInWk = allProjects.filter(p => p.workspace_id === wk.id)
+                              const isWkChecked = tempWorkspaces.has(wk.id)
+                              return (
+                                <div key={wk.id} className="border border-zinc-100 rounded-xl p-4 bg-zinc-50/50 transition-colors">
+                                  <label className="flex items-center gap-3 cursor-pointer">
+                                    <input type="checkbox" checked={isWkChecked} onChange={() => toggleWorkspace(wk.id)} className="w-4 h-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                                    <span className="font-semibold text-zinc-800 text-sm">{wk.name}</span>
+                                  </label>
+                                  {projectsInWk.length > 0 && (
+                                    <div className="mt-3 ml-7 space-y-2.5 border-l-2 border-zinc-200 pl-4 py-0.5">
+                                      {projectsInWk.map(prj => (
+                                        <label key={prj.id} className="flex items-center gap-2.5 cursor-pointer group">
+                                          <input type="checkbox" checked={tempProjects.has(prj.id)} onChange={() => toggleProject(prj.id)} className="w-3.5 h-3.5 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 cursor-pointer" />
+                                          <span className="text-sm text-zinc-600 group-hover:text-zinc-800 transition-colors">{prj.name} <span className="text-[10px] text-zinc-400 font-medium px-1.5 py-0.5 bg-white border border-zinc-100 rounded ml-1.5">{prj.category}</span></span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
+              {/* 🔴 TAMPILAN 2FA / DELETE VERIFICATION TETAP SAMA */}
               {mfaState !== 'idle' && (
                 <div className="text-center animate-in slide-in-from-right-8 duration-300">
                   <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -389,7 +537,7 @@ export default function UsersManagementPage() {
 
                   {mfaState === 'verified' && (
                     <p className="text-sm text-zinc-600 mb-6">
-                      2FA Verified. Are you sure you want to permanently delete <strong>{selectedUser.full_name}</strong>?
+                      2FA Verified. Are you sure you want to permanently delete <strong>{selectedUser.full_name || selectedUser.email}</strong>?
                     </p>
                   )}
                 </div>
@@ -397,12 +545,13 @@ export default function UsersManagementPage() {
 
             </div>
 
-            <div className="px-6 py-4 border-t border-zinc-100 bg-white flex justify-between items-center rounded-b-2xl">
+            {/* 🔴 FOOTER MODAL */}
+            <div className="px-6 py-4 border-t border-zinc-100 bg-white flex justify-between items-center rounded-b-2xl shrink-0">
               
               <div className="flex-1">
                 {mfaState === 'idle' && isAdminOrSuperAdmin && currentUserProfile?.id !== selectedUser.id && (
                   <button onClick={initiateDelete} className="text-[11px] font-bold text-red-500 hover:text-red-700 transition-colors uppercase tracking-wide">
-                    Delete User
+                    {selectedUser.isPending ? "Batalkan Invite (Delete)" : "Delete User"}
                   </button>
                 )}
               </div>
@@ -411,15 +560,17 @@ export default function UsersManagementPage() {
                 {mfaState === 'idle' ? (
                   <>
                     <button onClick={closeModal} className="px-4 py-2 text-sm font-semibold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-colors">Cancel</button>
-                    <button onClick={handleSaveAkses} disabled={isSaving} className="px-5 py-2 text-sm font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors disabled:opacity-50 flex items-center shadow-sm">
-                      {isSaving ? "Saving..." : "Save Changes"}
-                    </button>
+                    {!selectedUser.isPending && (
+                      <button onClick={handleSaveAkses} disabled={isSaving} className="px-5 py-2 text-sm font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-xl transition-colors disabled:opacity-50 flex items-center shadow-sm">
+                        {isSaving ? "Saving..." : "Save Changes"}
+                      </button>
+                    )}
                   </>
                 ) : (
                   <>
                     <button onClick={() => setMfaState('idle')} className="px-4 py-2 text-sm font-semibold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-colors">Back</button>
-                    <button onClick={verifyMfaAndExecute} disabled={isDeleting || (mfaState !== 'verified' && mfaCode.length < 6)} className="px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors disabled:opacity-50 shadow-sm">
-                      {isDeleting ? "Processing..." : mfaState === 'verified' ? "Confirm Delete" : "Verify & Delete"}
+                    <button onClick={verifyMfaAndExecute} disabled={isDeleting || mfaCode.length < 6} className="px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors disabled:opacity-50 shadow-sm">
+                      {isDeleting ? "Processing..." : "Verify & Delete"}
                     </button>
                   </>
                 )}

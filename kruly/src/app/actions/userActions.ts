@@ -66,3 +66,48 @@ export async function inviteUserToKruly(email: string) {
     return { success: false, message: "Gagal mengirim undangan: " + error.message }
   }
 }
+
+// ==========================================
+// FUNGSI 3: MENGAMBIL DAFTAR LENGKAP USER (TERMASUK YANG PENDING)
+// ==========================================
+export async function getAdminUsersList() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { success: false, message: "Kunci server belum diatur", data: [] }
+  }
+
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+
+  try {
+    // 1. Ambil data asli dari brankas Authentication (termasuk yang baru di-invite)
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.listUsers()
+    if (authErr) throw authErr
+    
+    // 2. Ambil data dari tabel Profiles (untuk yang sudah punya nama)
+    const { data: profiles, error: profErr } = await supabaseAdmin.from('profiles').select('*')
+    if (profErr) throw profErr
+    
+    // 3. Gabungkan datanya!
+    const mergedUsers = authData.users.map(u => {
+      const prof = profiles.find(p => p.id === u.id)
+      
+      // Jika user belum pernah login sama sekali, statusnya berarti masih "Pending Invite"
+      const isPending = !u.last_sign_in_at
+
+      return {
+        id: u.id,
+        email: u.email,
+        full_name: prof?.full_name || '',
+        global_role: prof?.global_role || 'member',
+        avatar_url: prof?.avatar_url || '',
+        isPending: isPending
+      }
+    })
+    
+    return { success: true, data: mergedUsers }
+  } catch (error: any) {
+    return { success: false, message: error.message, data: [] }
+  }
+}
