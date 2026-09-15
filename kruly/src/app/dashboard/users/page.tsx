@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
-import { deleteUserAccountMFA, getAdminUsersList } from "@/app/actions/userActions" // 🔴 IMPORT FUNGSI BARU
+import { deleteUserAccountMFA, getAdminUsersList, inviteUserToKruly } from "@/app/actions/userActions" // 🔴 FIX: Sudah ada inviteUserToKruly
 import InviteUserModal from "./InviteUserModal"
 
 const formatLogTime = (dateString: string) => {
@@ -19,12 +19,14 @@ export default function UsersManagementPage() {
   const [auditLogs, setAuditLogs] = useState<any[]>([])
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null)
 
-  // 🔴 STATE UNTUK USER YANG SEDANG ONLINE
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set())
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any | null>(null)
+  
+  // 🔴 FIX: Tambah State Resend
+  const [isResending, setIsResending] = useState(false)
   
   const [initialGlobalRole, setInitialGlobalRole] = useState("")
   const [tempGlobalRole, setTempGlobalRole] = useState("")
@@ -55,7 +57,6 @@ export default function UsersManagementPage() {
       setCurrentUserProfile(currProfile)
     }
 
-    // 🔴 KITA GUNAKAN FUNGSI SERVER ACTION YANG BARU DIBUAT
     const adminUsersResponse = await getAdminUsersList()
 
     const [
@@ -70,7 +71,6 @@ export default function UsersManagementPage() {
     ])
 
     if (adminUsersResponse.success) {
-      // Sort: User dengan nama di atas, pending di bawah
       const sortedUsers = adminUsersResponse.data.sort((a: any, b: any) => {
         if (a.isPending && !b.isPending) return 1
         if (!a.isPending && b.isPending) return -1
@@ -91,11 +91,10 @@ export default function UsersManagementPage() {
   useEffect(() => { 
     fetchData() 
     
-    // Inisialisasi channel presence
     const room = supabase.channel('online-users', {
       config: {
         presence: {
-          key: '', // Akan di-override saat track()
+          key: '', 
         },
       },
     })
@@ -104,18 +103,14 @@ export default function UsersManagementPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Dengarkan perubahan state presence
       room.on('presence', { event: 'sync' }, () => {
         const newState = room.presenceState()
-        // Ambil semua key (user_id) yang sedang aktif
         const activeIds = Object.keys(newState)
         setOnlineUsers(new Set(activeIds))
       })
 
-      // Subscribe ke channel dan umumkan kehadiran (track)
       room.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // Track diri sendiri dengan ID user sebagai key
           await room.track({ online_at: new Date().toISOString() })
         }
       })
@@ -124,7 +119,6 @@ export default function UsersManagementPage() {
     setupPresence()
 
     return () => { 
-      // Bersihkan channel saat komponen di-unmount
       room.unsubscribe() 
       supabase.removeChannel(room) 
     }
@@ -154,6 +148,21 @@ export default function UsersManagementPage() {
     const newSet = new Set(tempProjects); if (newSet.has(projectId)) newSet.delete(projectId); else newSet.add(projectId); setTempProjects(newSet)
   }
 
+  // 🔴 FIX: Fungsi Resend Invite
+  const handleResendInvite = async () => {
+    if (!selectedUser || !selectedUser.email) return
+    setIsResending(true)
+    
+    const result = await inviteUserToKruly(selectedUser.email)
+    
+    if (result.success) {
+      showToast(`Undangan berhasil dikirim ulang ke ${selectedUser.email}`, 'success')
+    } else {
+      showToast(result.message || "Gagal mengirim ulang undangan", 'error')
+    }
+    setIsResending(false)
+  }
+
   const handleSaveAkses = async () => {
     if (!selectedUser) return
     setIsSaving(true)
@@ -181,16 +190,12 @@ export default function UsersManagementPage() {
     setMfaState('checking')
     setMfaCode('')
 
-    // Kita langsung cek faktor authenticator yang terdaftar
     const { data: factors } = await supabase.auth.mfa.listFactors()
     
-    // Cek apakah user sudah punya TOTP factor yang aktif
     if (factors?.totp && factors.totp.length > 0 && factors.totp[0].status === 'verified') {
-      // Selalu minta kode jika sudah pernah setup
       setMfaFactorId(factors.totp[0].id)
       setMfaState('verify')
     } else {
-      // Jika belum pernah setup sama sekali, mulai proses pendaftaran (enrollment)
       const { data: enrollData, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
       if (!error && enrollData) {
         setMfaFactorId(enrollData.id)
@@ -206,12 +211,10 @@ export default function UsersManagementPage() {
   const verifyMfaAndExecute = async () => {
     setIsDeleting(true)
     try {
-      // Buat challenge baru setiap kali akan mengeksekusi
       const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
       
       if (challengeError) throw new Error("Gagal memulai verifikasi keamanan.")
 
-      // Verifikasi kode yang dimasukkan user terhadap challenge yang baru dibuat
       const verifyRes = await supabase.auth.mfa.verify({
         factorId: mfaFactorId, 
         challengeId: challengeData!.id, 
@@ -220,7 +223,6 @@ export default function UsersManagementPage() {
       
       if (verifyRes.error) throw new Error("Kode Authenticator tidak valid!")
 
-      // Jika kode benar, lanjutkan penghapusan
       const result = await deleteUserAccountMFA(selectedUser.id)
       
       if (result.success) {
@@ -284,7 +286,6 @@ export default function UsersManagementPage() {
         {/* --- TAB 1: USERS --- */}
         {activeTab === 'users' && (
           <div className="animate-in fade-in duration-300">
-            {/* 🔴 HEADER TABEL DIUBAH AGAR ADA STATUS */}
             <div className="grid grid-cols-12 gap-4 border-b border-zinc-200 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
               <div className="col-span-3 pl-2">User</div>
               <div className="col-span-2 text-center">Status</div>
@@ -324,7 +325,7 @@ export default function UsersManagementPage() {
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-[10px] text-zinc-500 truncate">{user.email}</span>
                           
-                          {/* 🔴 IKON VERIFIED (Muncul jika user SUDAH tidak pending) */}
+                          {/* IKON VERIFIED (Muncul jika user SUDAH tidak pending) */}
                           {!user.isPending && (
                             <div title="Verified Account" className="text-indigo-500 shrink-0">
                               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -336,7 +337,7 @@ export default function UsersManagementPage() {
                       </div>
                     </div>
 
-                    {/* 🔴 KOLOM STATUS BARU */}
+                    {/* KOLOM STATUS */}
                     <div className="col-span-2 flex justify-center">
                       {user.isPending ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold uppercase tracking-wider">
@@ -386,7 +387,7 @@ export default function UsersManagementPage() {
           </div>
         )}
 
-        {/* --- TAB 2: LOGS --- (Tidak ada perubahan) */}
+        {/* --- TAB 2: LOGS --- */}
         {activeTab === 'logs' && isAdminOrSuperAdmin && (
           <div className="animate-in fade-in duration-300">
              <div className="grid grid-cols-12 gap-4 border-b border-zinc-200 py-2 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
@@ -427,16 +428,31 @@ export default function UsersManagementPage() {
               
               {mfaState === 'idle' && (
                 <div className="space-y-7 animate-in fade-in duration-300">
-                  {/* JIKA USER MASIH PENDING, SEMBUNYIKAN PENGATURAN AKSES */}
+                  {/* 🔴 FIX: JIKA USER MASIH PENDING, TAMPILKAN TOMBOL RESEND */}
                   {selectedUser.isPending ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center">
                       <svg className="w-8 h-8 text-amber-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       <h4 className="font-bold text-amber-800 text-sm mb-1">User Belum Mengatur Password</h4>
-                      <p className="text-xs text-amber-700/80 mb-4">Kamu tidak bisa mengatur role atau workspace untuk user yang belum menyelesaikan registrasi. Jika dirasa ada kesalahan email, kamu bisa menghapus user ini dan mengundangnya kembali.</p>
+                      <p className="text-xs text-amber-700/80 mb-5">
+                        Link undangan mungkin sudah kedaluwarsa atau belum diklik. Kamu bisa mengirim ulang link tersebut ke email <strong>{selectedUser.email}</strong>.
+                      </p>
+                      
+                      <button 
+                        onClick={handleResendInvite} 
+                        disabled={isResending}
+                        className="px-4 py-2 text-sm font-bold text-amber-900 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors disabled:opacity-50 shadow-sm flex items-center justify-center mx-auto gap-2"
+                      >
+                        {isResending ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4 text-amber-900" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Mengirim...
+                          </>
+                        ) : "Kirim Ulang Undangan"}
+                      </button>
                     </div>
                   ) : (
                     <>
-                      {/* ROLE & WORKSPACE ACCESS TETAP SAMA */}
+                      {/* ROLE & WORKSPACE ACCESS */}
                       <div>
                         <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">Global System Role</label>
                         {selectedUser.global_role === 'super_admin' ? (
@@ -505,7 +521,7 @@ export default function UsersManagementPage() {
                 </div>
               )}
 
-              {/* 🔴 TAMPILAN 2FA / DELETE VERIFICATION TETAP SAMA */}
+              {/* 🔴 TAMPILAN 2FA / DELETE VERIFICATION */}
               {mfaState !== 'idle' && (
                 <div className="text-center animate-in slide-in-from-right-8 duration-300">
                   <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
