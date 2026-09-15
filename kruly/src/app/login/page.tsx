@@ -18,17 +18,21 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN & RECOVERY (LUPA PASSWORD)
+  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN, RECOVERY (LUPA PASSWORD), & PEMBERSIH URL
   useEffect(() => {
     const checkInviteLink = async () => {
       const hash = window.location.hash
       
       if (hash && hash.includes("access_token")) {
+        
+        // 🧹 SAPU BERSIH TOKEN DARI URL SECARA INSTAN!
+        window.history.replaceState(null, '', window.location.pathname)
+
         // Beri sedikit waktu agar Supabase selesai mengeset sesi di background
         const { data: { session } } = await supabase.auth.getSession()
         
         if (session) {
-           // Tangkap link "invite" maupun link "recovery" (reset password)
+           // Tangkap link "invite" (akun baru) maupun link "recovery" (reset password)
            if (hash.includes("type=invite") || hash.includes("type=recovery")) {
              router.push("/set-password")
            } else {
