@@ -2,6 +2,9 @@
 
 import { createClient } from "@supabase/supabase-js"
 
+// ==========================================
+// FUNGSI 1: MENGHAPUS USER (MFA / 2FA)
+// ==========================================
 export async function deleteUserAccountMFA(targetUserId: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -34,5 +37,32 @@ export async function deleteUserAccountMFA(targetUserId: string) {
     
   } catch (error: any) {
     return { success: false, message: "DB Error: " + error.message }
+  }
+}
+
+// ==========================================
+// FUNGSI 2: MENGUNDANG USER BARU
+// ==========================================
+export async function inviteUserToKruly(email: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return { success: false, message: "Server Error: SUPABASE_SERVICE_ROLE_KEY belum diatur." }
+  }
+
+  // Buat koneksi Supabase menggunakan Kunci Dewa (Service Role)
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+
+  try {
+    // Eksekusi pengiriman undangan via email bawaan Supabase
+    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email)
+    
+    if (error) throw error
+    
+    return { success: true }
+    
+  } catch (error: any) {
+    return { success: false, message: "Gagal mengirim undangan: " + error.message }
   }
 }

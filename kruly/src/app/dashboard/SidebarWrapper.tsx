@@ -38,7 +38,7 @@ export default function SidebarWrapper({
       </button>
 
       {/* HEADER */}
-      <div className={`h-16 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-6'} border-b border-zinc-900 shrink-0 transition-all duration-300 overflow-hidden`}>
+      <div className={`h-16 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-6'} border-b border-zinc-900 shrink-0 transition-all duration-300`}>
         <div className={`font-black tracking-tighter text-white transition-all duration-300 ${isCollapsed ? 'text-xl' : 'text-2xl'}`}>
           {isCollapsed ? 'K.' : 'Kruly.'}
         </div>

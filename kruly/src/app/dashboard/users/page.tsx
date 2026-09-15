@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { deleteUserAccountMFA } from "@/app/actions/userActions"
+import InviteUserModal from "./InviteUserModal" // 🔴 IMPORT KOMPONEN INVITE
 
 const formatLogTime = (dateString: string) => {
   const date = new Date(dateString)
@@ -31,7 +32,6 @@ export default function UsersManagementPage() {
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null)
   const [activeTab, setActiveTab] = useState('users')
 
-  // 🔴 STATE UNTUK SISTEM 2FA (MFA)
   const [isDeleting, setIsDeleting] = useState(false)
   const [mfaState, setMfaState] = useState<'idle' | 'checking' | 'setup' | 'verify' | 'verified'>('idle')
   const [qrCodeSvg, setQrCodeSvg] = useState('')
@@ -83,7 +83,7 @@ export default function UsersManagementPage() {
     setTempGlobalRole(user.global_role || 'member'); 
     setInitialGlobalRole(user.global_role || 'member')
     setIsRoleDropdownOpen(false) 
-    setMfaState('idle') // Reset state modal ke tampilan Manage Access
+    setMfaState('idle') 
     setMfaCode('')
     
     setTempWorkspaces(new Set(workspaceMembers.filter(wm => wm.user_id === user.id).map(wm => wm.workspace_id)))
@@ -141,7 +141,7 @@ export default function UsersManagementPage() {
       const { data: enrollData, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
       if (!error && enrollData) {
         setMfaFactorId(enrollData.id)
-        setQrCodeSvg(enrollData.totp.qr_code) // Supabase mengembalikan Data URI URL
+        setQrCodeSvg(enrollData.totp.qr_code) 
         setMfaState('setup')
       } else {
         showToast("Failed to initialize 2FA system", 'error'); setMfaState('idle')
@@ -199,10 +199,18 @@ export default function UsersManagementPage() {
 
       {/* HEADER & TABS */}
       <div className="border-b border-zinc-200 pb-2 mb-8 relative z-10 -mx-6 px-6 -mt-6 pt-6 bg-white">
-        <div className="mb-6">
-          <h1 className="text-3xl font-black text-zinc-900 tracking-tight">User Management</h1>
-          <p className="text-sm text-zinc-500 mt-1">Manage team members, global roles, and workspace access.</p>
+        
+        {/* 🔴 HEADER YANG SUDAH DITAMBAH TOMBOL INVITE USER */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h1 className="text-3xl font-black text-zinc-900 tracking-tight">User Management</h1>
+            <p className="text-sm text-zinc-500 mt-1">Manage team members, global roles, and workspace access.</p>
+          </div>
+          <div className="shrink-0 mt-1">
+            <InviteUserModal />
+          </div>
         </div>
+
         <div className="flex gap-6 text-sm font-medium">
           <button onClick={() => setActiveTab('users')} className={`pb-3 border-b-2 transition-colors ${activeTab === 'users' ? 'border-indigo-600 text-indigo-700 font-bold' : 'border-transparent text-zinc-500 hover:text-zinc-800'}`}>Users</button>
           {isAdminOrSuperAdmin && (
@@ -233,7 +241,6 @@ export default function UsersManagementPage() {
                   <div className="col-span-3 text-xs text-zinc-500"><span className="font-semibold text-zinc-700">{getWorkspaceCount(user.id)}</span> Workspaces</div>
                   
                   <div className="col-span-2 flex justify-end pr-2">
-                    {/* 🔴 TOMBOL MANAGE TUNGGAL */}
                     <button onClick={() => openModal(user)} className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-wide">
                       Manage
                     </button>
@@ -283,7 +290,6 @@ export default function UsersManagementPage() {
 
             <div className="p-6 overflow-y-auto flex-1 space-y-7 custom-scrollbar relative">
               
-              {/* 🔴 TAMPILAN MANAGE ACCESS BIASA */}
               {mfaState === 'idle' && (
                 <div className="space-y-7 animate-in fade-in duration-300">
                   <div>
@@ -352,7 +358,6 @@ export default function UsersManagementPage() {
                 </div>
               )}
 
-              {/* 🔴 TAMPILAN 2FA / DELETE VERIFICATION */}
               {mfaState !== 'idle' && (
                 <div className="text-center animate-in slide-in-from-right-8 duration-300">
                   <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -364,7 +369,6 @@ export default function UsersManagementPage() {
                   {mfaState === 'setup' && (
                     <div className="mb-6">
                       <p className="text-xs text-zinc-500 mb-4 px-2">Scan this QR code with <strong>Google Authenticator</strong> or <strong>Authy</strong> to secure your Admin account before deleting users.</p>
-                      {/* 🔴 FIX QR CODE: Memakai tag <img> karena Supabase mereturn Data URI Image */}
                       <div className="w-48 h-48 mx-auto bg-white border border-zinc-200 p-3 rounded-xl shadow-sm mb-6 flex items-center justify-center">
                         {qrCodeSvg ? (
                           <img src={qrCodeSvg} alt="2FA QR Code" className="w-full h-full object-contain" />
@@ -393,10 +397,8 @@ export default function UsersManagementPage() {
 
             </div>
 
-            {/* 🔴 FOOTER MODAL */}
             <div className="px-6 py-4 border-t border-zinc-100 bg-white flex justify-between items-center rounded-b-2xl">
               
-              {/* Kiri: Tombol Delete User (Hanya muncul saat mfaState === 'idle') */}
               <div className="flex-1">
                 {mfaState === 'idle' && isAdminOrSuperAdmin && currentUserProfile?.id !== selectedUser.id && (
                   <button onClick={initiateDelete} className="text-[11px] font-bold text-red-500 hover:text-red-700 transition-colors uppercase tracking-wide">
@@ -405,7 +407,6 @@ export default function UsersManagementPage() {
                 )}
               </div>
 
-              {/* Kanan: Action Buttons */}
               <div className="flex gap-3">
                 {mfaState === 'idle' ? (
                   <>
