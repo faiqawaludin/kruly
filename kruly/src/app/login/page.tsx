@@ -18,45 +18,59 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN, RECOVERY, & ERROR HANDLING
-  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN & RECOVERY (ANTI-RACE CONDITION)
+  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN (CARA BRUTE FORCE YANG AMAN)
   useEffect(() => {
-    const hash = window.location.hash
-    
-    // 1. Tangkap error kalau link kedaluwarsa
-    if (hash && hash.includes("error_code=otp_expired")) {
-      window.history.replaceState(null, '', window.location.pathname)
-      setErrorMsg("Link undangan/reset password sudah kedaluwarsa atau pernah dipakai. Silakan minta link baru.")
-      return
-    }
+    const handleRedirects = async () => {
+      // 1. Ambil hash (semua teks setelah tanda #)
+      const hash = window.location.hash
+      if (!hash) return
 
-    // 2. Tangkap token sukses (Invite / Recovery)
-    if (hash && hash.includes("access_token")) {
-      
-      // JANGAN hapus URL dulu! Biarkan Supabase bekerja memproses token.
-      // Kita gunakan 'onAuthStateChange' untuk mendengarkan aba-aba dari Supabase.
-      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-        
-        // Jika Supabase sudah berteriak "SIGNED_IN" atau "PASSWORD_RECOVERY"...
-        if (event === "SIGNED_IN" || event === "PASSWORD_RECOVERY") {
-          
-          // SEKARANG baru aman untuk menyapu bersih URL! 🧹
+      // 2. Jika link kedaluwarsa
+      if (hash.includes("error_code=otp_expired")) {
+        window.history.replaceState(null, '', window.location.pathname)
+        setErrorMsg("Link undangan/reset sudah kedaluwarsa atau pernah dipakai. Silakan minta link baru.")
+        return
+      }
+
+      // 3. JIKA ADA TOKEN SAKTI (Invite / Recovery)
+      if (hash.includes("access_token")) {
+        // Tampilkan teks loading agar user tahu sistem sedang bekerja
+        setLoading(true)
+        setSuccessMsg("Memproses tautan aman... Mohon tunggu sebentar.")
+
+        // Cek sesi secara paksa. Jika null, kita coba 3 kali setiap 500ms
+        let sessionData = null
+        for (let i = 0; i < 3; i++) {
+          const { data } = await supabase.auth.getSession()
+          if (data.session) {
+            sessionData = data.session
+            break
+          }
+          // Tunggu 500ms sebelum mencoba lagi
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+
+        // 4. JIKA SESI BERHASIL DITANGKAP
+        if (sessionData) {
+          // Sapu bersih token dari URL SEKARANG
           window.history.replaceState(null, '', window.location.pathname)
-          
-          // Arahkan user ke halaman yang tepat
+
+          // Lempar ke halaman Set Password
           if (hash.includes("type=invite") || hash.includes("type=recovery")) {
             router.push("/set-password")
           } else {
             router.push("/dashboard")
           }
+        } else {
+          // Jika sudah 3x dicek tapi gagal (Sangat jarang terjadi)
+          setLoading(false)
+          setSuccessMsg("")
+          setErrorMsg("Gagal memproses sesi login. Silakan refresh halaman atau coba klik link lagi.")
         }
-      })
-
-      // Bersihkan listener jika komponen ditutup
-      return () => {
-        authListener.subscription.unsubscribe()
       }
     }
+
+    handleRedirects()
   }, [router, supabase])
 
   const handleLogin = async (e: React.FormEvent) => {
