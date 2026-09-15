@@ -267,7 +267,7 @@ export default function UsersManagementPage() {
             <p className="text-sm text-zinc-500 mt-1">Manage team members, global roles, and workspace access.</p>
           </div>
           <div className="shrink-0 mt-1">
-            <InviteUserModal />
+            <InviteUserModal onInviteSuccess={fetchData} />
           </div>
         </div>
 

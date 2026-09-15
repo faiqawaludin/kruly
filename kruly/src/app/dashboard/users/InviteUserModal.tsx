@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { inviteUserToKruly } from "@/app/actions/userActions"
 
-export default function InviteUserModal() {
+// 🔴 FIX: Menambahkan props onInviteSuccess agar tabel bisa di-refresh
+export default function InviteUserModal({ onInviteSuccess }: { onInviteSuccess?: () => void }) {
   const [isOpen, setIsOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -19,7 +20,13 @@ export default function InviteUserModal() {
     if (result.success) {
       setMessage({ text: "Undangan berhasil dikirim ke email tersebut!", type: 'success' })
       setEmail("")
-      // Opsional: Tutup modal otomatis setelah 2 detik
+      
+      // 🔴 FIX: Panggil fungsi penyegaran (fetchData) dari parent component
+      if (onInviteSuccess) {
+        onInviteSuccess()
+      }
+
+      // Tutup modal otomatis setelah 2 detik
       setTimeout(() => {
         setIsOpen(false)
         setMessage(null)
