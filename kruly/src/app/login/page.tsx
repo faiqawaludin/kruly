@@ -18,54 +18,54 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  // 🔴 FIX 1: PENCEGAT LINK UNDANGAN (CARA BRUTE FORCE YANG AMAN)
+  // 🔴 FIX 1: MANUAL OVERRIDE UNTUK MENANGKAP TOKEN DARI URL
   useEffect(() => {
     const handleRedirects = async () => {
-      // 1. Ambil hash (semua teks setelah tanda #)
       const hash = window.location.hash
       if (!hash) return
 
-      // 2. Jika link kedaluwarsa
       if (hash.includes("error_code=otp_expired")) {
         window.history.replaceState(null, '', window.location.pathname)
         setErrorMsg("Link undangan/reset sudah kedaluwarsa atau pernah dipakai. Silakan minta link baru.")
         return
       }
 
-      // 3. JIKA ADA TOKEN SAKTI (Invite / Recovery)
       if (hash.includes("access_token")) {
-        // Tampilkan teks loading agar user tahu sistem sedang bekerja
         setLoading(true)
-        setSuccessMsg("Memproses tautan aman... Mohon tunggu sebentar.")
+        setSuccessMsg("Memproses tautan aman...")
 
-        // Cek sesi secara paksa. Jika null, kita coba 3 kali setiap 500ms
-        let sessionData = null
-        for (let i = 0; i < 3; i++) {
-          const { data } = await supabase.auth.getSession()
-          if (data.session) {
-            sessionData = data.session
-            break
-          }
-          // Tunggu 500ms sebelum mencoba lagi
-          await new Promise(resolve => setTimeout(resolve, 500))
-        }
+        try {
+          // 1. Ekstrak token secara manual dari teks URL
+          const params = new URLSearchParams(hash.substring(1)) // Hilangkan tanda #
+          const accessToken = params.get("access_token")
+          const refreshToken = params.get("refresh_token")
+          const type = params.get("type") // 'invite' atau 'recovery'
 
-        // 4. JIKA SESI BERHASIL DITANGKAP
-        if (sessionData) {
-          // Sapu bersih token dari URL SEKARANG
-          window.history.replaceState(null, '', window.location.pathname)
+          if (accessToken && refreshToken) {
+            // 2. Paksa Supabase untuk membuat sesi dari token yang kita temukan
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            })
 
-          // Lempar ke halaman Set Password
-          if (hash.includes("type=invite") || hash.includes("type=recovery")) {
-            router.push("/set-password")
+            if (error) throw error
+
+            // 3. Sapu bersih URL
+            window.history.replaceState(null, '', window.location.pathname)
+
+            // 4. Arahkan user sesuai tipenya
+            if (type === "invite" || type === "recovery") {
+              router.push("/set-password")
+            } else {
+              router.push("/dashboard")
+            }
           } else {
-            router.push("/dashboard")
+            throw new Error("Token tidak lengkap")
           }
-        } else {
-          // Jika sudah 3x dicek tapi gagal (Sangat jarang terjadi)
+        } catch (err: any) {
           setLoading(false)
           setSuccessMsg("")
-          setErrorMsg("Gagal memproses sesi login. Silakan refresh halaman atau coba klik link lagi.")
+          setErrorMsg("Gagal memproses sesi. Silakan coba klik link email lagi.")
         }
       }
     }
