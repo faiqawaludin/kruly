@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/utils/supabase/client"
-import { deleteUserAccountMFA, getAdminUsersList, inviteUserToKruly } from "@/app/actions/userActions" // 🔴 FIX: Sudah ada inviteUserToKruly
+import { deleteUserAccountMFA, getAdminUsersList, inviteUserToKruly } from "@/app/actions/userActions"
 import InviteUserModal from "./InviteUserModal"
 
 const formatLogTime = (dateString: string) => {
@@ -25,7 +25,6 @@ export default function UsersManagementPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [selectedUser, setSelectedUser] = useState<any | null>(null)
   
-  // 🔴 FIX: Tambah State Resend
   const [isResending, setIsResending] = useState(false)
   
   const [initialGlobalRole, setInitialGlobalRole] = useState("")
@@ -148,7 +147,6 @@ export default function UsersManagementPage() {
     const newSet = new Set(tempProjects); if (newSet.has(projectId)) newSet.delete(projectId); else newSet.add(projectId); setTempProjects(newSet)
   }
 
-  // 🔴 FIX: Fungsi Resend Invite
   const handleResendInvite = async () => {
     if (!selectedUser || !selectedUser.email) return
     setIsResending(true)
@@ -163,27 +161,70 @@ export default function UsersManagementPage() {
     setIsResending(false)
   }
 
+  // 🔴 FIX: Modifikasi fungsi handleSaveAkses
   const handleSaveAkses = async () => {
     if (!selectedUser) return
     setIsSaving(true)
     try {
+      
       if (tempGlobalRole !== initialGlobalRole) {
-        await supabase.from('audit_logs').insert({ action: 'Update Role', executor_id: currentUserProfile?.id, executor_name: currentUserProfile?.full_name, target_user_id: selectedUser.id, target_user_name: selectedUser.full_name || selectedUser.email, details: `Changed role from '${initialGlobalRole}' to '${tempGlobalRole}'` })
+        await supabase.from('audit_logs').insert({ 
+          action: 'Update Role', 
+          executor_id: currentUserProfile?.id, 
+          executor_name: currentUserProfile?.full_name, 
+          target_user_id: selectedUser.id, 
+          target_user_name: selectedUser.full_name || selectedUser.email, 
+          details: `Changed role from '${initialGlobalRole}' to '${tempGlobalRole}'` 
+        })
       }
+      
       await supabase.from('profiles').update({ global_role: tempGlobalRole }).eq('id', selectedUser.id)
+
       await supabase.from('workspace_members').delete().eq('user_id', selectedUser.id)
-      if (tempWorkspaces.size > 0) {
-        const newWkMembers = Array.from(tempWorkspaces).map(id => ({ user_id: selectedUser.id, workspace_id: id, role: 'member' }))
-        await supabase.from('workspace_members').insert(newWkMembers)
-      }
       await supabase.from('project_members').delete().eq('user_id', selectedUser.id)
-      if (tempProjects.size > 0) {
-        const newPrjMembers = Array.from(tempProjects).map(id => ({ user_id: selectedUser.id, project_id: id, role: 'member' }))
-        await supabase.from('project_members').insert(newPrjMembers)
+
+      // Hanya insert jika ada workspace yang dipilih
+      if (tempWorkspaces.size > 0) {
+        const newWkMembers = Array.from(tempWorkspaces).map(id => ({ 
+          user_id: selectedUser.id, 
+          workspace_id: id,
+          // HAPUS kolom role: 'member' untuk sementara waktu jika ini memicu error RLS
+        }))
+        
+        const { error: wkError } = await supabase.from('workspace_members').insert(newWkMembers).select()
+        if (wkError) throw new Error("Database Error: " + wkError.message)
       }
-      await supabase.from('audit_logs').insert({ action: 'Update Access', executor_id: currentUserProfile?.id, executor_name: currentUserProfile?.full_name, target_user_id: selectedUser.id, target_user_name: selectedUser.full_name || selectedUser.email, details: `Granted access to ${tempWorkspaces.size} workspaces & ${tempProjects.size} projects.` })
-      await fetchData(); closeModal(); showToast(`Access updated for ${selectedUser.full_name || 'User'}`, 'success')
-    } catch (error: any) { showToast("Error: " + error.message, 'error') } finally { setIsSaving(false) }
+
+      if (tempProjects.size > 0) {
+        const newPrjMembers = Array.from(tempProjects).map(id => ({ 
+          user_id: selectedUser.id, 
+          project_id: id,
+          // HAPUS kolom role: 'member'
+        }))
+        
+        const { error: prjError } = await supabase.from('project_members').insert(newPrjMembers).select()
+        if (prjError) throw new Error("Database Error: " + prjError.message)
+      }
+
+      await supabase.from('audit_logs').insert({ 
+        action: 'Update Access', 
+        executor_id: currentUserProfile?.id, 
+        executor_name: currentUserProfile?.full_name, 
+        target_user_id: selectedUser.id, 
+        target_user_name: selectedUser.full_name || selectedUser.email, 
+        details: `Granted access to ${tempWorkspaces.size} workspaces & ${tempProjects.size} projects.` 
+      })
+
+      await fetchData(); 
+      closeModal(); 
+      showToast(`Access updated for ${selectedUser.full_name || 'User'}`, 'success')
+      
+    } catch (error: any) { 
+      // 🔴 SEKARANG ERROR AKAN MUNCUL JIKA ADA KEGAGALAN
+      showToast(error.message, 'error') 
+    } finally { 
+      setIsSaving(false) 
+    }
   }
 
   const initiateDelete = async () => {
@@ -428,7 +469,7 @@ export default function UsersManagementPage() {
               
               {mfaState === 'idle' && (
                 <div className="space-y-7 animate-in fade-in duration-300">
-                  {/* 🔴 FIX: JIKA USER MASIH PENDING, TAMPILKAN TOMBOL RESEND */}
+                  {/* JIKA USER MASIH PENDING, TAMPILKAN TOMBOL RESEND */}
                   {selectedUser.isPending ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center">
                       <svg className="w-8 h-8 text-amber-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
